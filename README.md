@@ -3,16 +3,17 @@
 I am currently working on systui, a terminal program that shows useful
 metrics of the system in a user-friendly manner.
 
-Right now it shows CPU usage as a bar that refreshes every second:
+Right now it shows, refreshing every second:
 
-```
-systui - press q to quit
+- CPU and memory usage as bars
+- a CPU breakdown with user, sys, idle, nice, iowait, irq, softirq, steal
+  and guest percentages
+- memory stats with total, used, free, active, buffers and cached
 
-CPU [|||||||                                 ]  17.3%
-```
+The panels sit side by side and move onto a new row when the terminal is
+too narrow for all of them.
 
-I have implemented CPU usage so far. I will keep making it evolve, and I
-plan to add memory and disk usage next. For now, let's see how it goes.
+I have implemented CPU and memory so far. I will keep making it evolve. For now, let's see how it goes.
 
 
 ## Build and run
