@@ -3,8 +3,9 @@ package ui
 import "strings"
 
 const (
-	ansiGreen     = "\x1b[32m"
 	ansiBoldWhite = "\x1b[1;97m"
+	ansiFill      = "\x1b[92m"
+	ansiTrack     = "\x1b[90m"
 	ansiReset     = "\x1b[0m"
 )
 
@@ -22,8 +23,8 @@ func renderBar(pct float64, width int) string {
 	}
 
 	return boldWhite("[") +
-		ansiGreen + strings.Repeat("|", filled) + ansiReset +
-		strings.Repeat(" ", width-filled) +
+		ansiFill + strings.Repeat("|", filled) + ansiReset +
+		ansiTrack + strings.Repeat("|", width-filled) + ansiReset +
 		boldWhite("]")
 }
 
