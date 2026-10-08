@@ -4,6 +4,7 @@ import "strings"
 
 const (
 	ansiGreen = "\x1b[32m"
+	ansiBold  = "\x1b[1m"
 	ansiReset = "\x1b[0m"
 )
 
@@ -24,4 +25,9 @@ func renderBar(pct float64, width int) string {
 		ansiGreen + strings.Repeat("|", filled) + ansiReset +
 		strings.Repeat(" ", width-filled) +
 		"]"
+}
+
+// bold wraps s in the ANSI bold sequence
+func bold(s string) string {
+	return ansiBold + s + ansiReset
 }
