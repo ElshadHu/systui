@@ -113,10 +113,15 @@ func (m Model) View() tea.View {
 // usagePanel renders the CPU and MEM bars
 func (m Model) usagePanel() []string {
 	return []string{
-		bold("% Usage"),
-		fmt.Sprintf("CPU: %s %5.1f%%", renderBar(m.cpu.Usage, m.barWidth), m.cpu.Usage),
-		fmt.Sprintf("MEM: %s %5.1f%%", renderBar(m.mem.UsedPercent, m.barWidth), m.mem.UsedPercent),
+		boldWhite("% Usage"),
+		usageRow("CPU", m.cpu.Usage, m.barWidth),
+		usageRow("MEM", m.mem.UsedPercent, m.barWidth),
 	}
+}
+
+// usageRow renders label with the text in bright white
+func usageRow(label string, pct float64, width int) string {
+	return boldWhite(label+":") + " " + renderBar(pct, width) + " " + boldWhite(fmt.Sprintf("%5.1f%%", pct))
 }
 
 // cpuPanel renders the per-counter CPU breakdown
@@ -126,7 +131,7 @@ func (m Model) cpuPanel() []string {
 		pct("nice", m.cpu.Nice), pct("iowait", m.cpu.Iowait), pct("irq", m.cpu.Irq),
 		pct("softirq", m.cpu.Softirq), pct("steal", m.cpu.Steal), pct("guest", m.cpu.Guest),
 	}
-	return append([]string{bold("CPU")}, grid(cells, 3, cpuColWidth)...)
+	return append([]string{boldWhite("CPU")}, grid(cells, 3, cpuColWidth)...)
 }
 
 func (m Model) memPanel() []string {
@@ -138,13 +143,13 @@ func (m Model) memPanel() []string {
 		kv("buffers", formatBytes(m.mem.Buffers)),
 		kv("cached", formatBytes(m.mem.Cached)),
 	}
-	return append([]string{bold("MEM")}, grid(cells, 3, memColWidth)...)
+	return append([]string{boldWhite("MEM")}, grid(cells, 3, memColWidth)...)
 }
 
 func pct(label string, v float64) string {
-	return fmt.Sprintf("%s: %.1f%%", label, v)
+	return boldWhite(fmt.Sprintf("%s: %.1f%%", label, v))
 }
 
 func kv(label, v string) string {
-	return label + ": " + v
+	return boldWhite(label + ": " + v)
 }

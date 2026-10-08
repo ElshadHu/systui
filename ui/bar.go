@@ -3,9 +3,9 @@ package ui
 import "strings"
 
 const (
-	ansiGreen = "\x1b[32m"
-	ansiBold  = "\x1b[1m"
-	ansiReset = "\x1b[0m"
+	ansiGreen     = "\x1b[32m"
+	ansiBoldWhite = "\x1b[1;97m"
+	ansiReset     = "\x1b[0m"
 )
 
 // renderBar draws with the filled part in green
@@ -21,13 +21,13 @@ func renderBar(pct float64, width int) string {
 		filled = 0
 	}
 
-	return "[" +
+	return boldWhite("[") +
 		ansiGreen + strings.Repeat("|", filled) + ansiReset +
 		strings.Repeat(" ", width-filled) +
-		"]"
+		boldWhite("]")
 }
 
-// bold wraps s in the ANSI bold sequence
-func bold(s string) string {
-	return ansiBold + s + ansiReset
+// boldWhite renders s in bold bright white
+func boldWhite(s string) string {
+	return ansiBoldWhite + s + ansiReset
 }
