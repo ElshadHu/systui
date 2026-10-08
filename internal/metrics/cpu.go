@@ -6,6 +6,20 @@ import (
 	"github.com/shirou/gopsutil/v4/cpu"
 )
 
+// CPUStats holds percentages for one sampling interval
+type CPUStats struct {
+	Usage   float64
+	User    float64
+	Nice    float64
+	System  float64
+	Idle    float64
+	Iowait  float64
+	Irq     float64
+	Softirq float64
+	Steal   float64
+	Guest   float64
+}
+
 // CPUSampler remembers the last CPU time counters
 type CPUSampler struct {
 	prev cpu.TimesStat
@@ -21,14 +35,14 @@ func NewCPUSampler() (*CPUSampler, error) {
 }
 
 // Usage returns total CPU busy percentage since the prev call
-func (s *CPUSampler) Usage() (float64, error) {
+func (s *CPUSampler) Sample() (CPUStats, error) {
 	cur, err := readTotal()
 	if err != nil {
-		return 0, err
+		return CPUStats{}, err
 	}
-	pct := usagePercent(s.prev, cur)
+	stats := breakdown(s.prev, cur)
 	s.prev = cur
-	return pct, nil
+	return stats, nil
 }
 
 // readTotal returns the aggregated counters for all cores
@@ -49,23 +63,37 @@ func total(t cpu.TimesStat) float64 {
 	return t.User + t.Nice + t.System + t.Idle + t.Iowait + t.Irq + t.Softirq + t.Steal
 }
 
-// usagePercent returns the percentage of time the CPU was busy
-func usagePercent(prev, cur cpu.TimesStat) float64 {
+// breakdown returns each counter's share of the time between 2 samples
+func breakdown(prev, cur cpu.TimesStat) CPUStats {
 	dTotal := total(cur) - total(prev)
 	if dTotal <= 0 {
-		return 0
+		return CPUStats{}
 	}
+	share := func(prev, cur float64) float64 {
+		return percentLimit((cur - prev) / dTotal * 100)
 
-	dIdle := (cur.Idle + cur.Iowait) - (prev.Idle + prev.Iowait)
-	busy := dTotal - dIdle
+	}
+	s := CPUStats{
+		User:    share(prev.User, cur.User),
+		Nice:    share(prev.Nice, cur.Nice),
+		System:  share(prev.System, cur.System),
+		Idle:    share(prev.Idle, cur.Idle),
+		Iowait:  share(prev.Iowait, cur.Iowait),
+		Irq:     share(prev.Irq, cur.Irq),
+		Softirq: share(prev.Softirq, cur.Softirq),
+		Steal:   share(prev.Steal, cur.Steal),
+		Guest:   share(prev.Guest+prev.GuestNice, cur.Guest+cur.GuestNice),
+	}
+	s.Usage = percentLimit(100 - s.Idle - s.Iowait)
+	return s
+}
 
-	pct := busy / dTotal * 100
+func percentLimit(pct float64) float64 {
 	switch {
 	case pct < 0:
 		return 0
 	case pct > 100:
 		return 100
 	}
-
 	return pct
 }

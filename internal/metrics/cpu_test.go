@@ -6,12 +6,22 @@ import (
 	"github.com/shirou/gopsutil/v4/cpu"
 )
 
-func TestUsagePercent(t *testing.T) {
+func TestBreakdown(t *testing.T) {
 	prev := cpu.TimesStat{User: 100, System: 50, Idle: 850}
 	cur := cpu.TimesStat{User: 160, System: 70, Idle: 870}
-	got := usagePercent(prev, cur)
-	if got != 80 {
-		t.Fatalf("want 80, got %v", got)
+	got := breakdown(prev, cur)
+	want := CPUStats{Usage: 80, User: 60, System: 20, Idle: 20}
+	if got != want {
+		t.Fatalf("want %+v, got %+v", want, got)
+	}
+}
+
+func TestBreakdownGuestDoesNotChangeUsage(t *testing.T) {
+	prev := cpu.TimesStat{User: 100, Idle: 100}
+	cur := cpu.TimesStat{User: 150, Idle: 150, Guest: 25}
+	got := breakdown(prev, cur)
+	if got.Usage != 50 || got.Guest != 25 {
+		t.Fatalf("want usage 50 guest 25, got %+v", got)
 	}
 }
 
@@ -23,9 +33,9 @@ func TestTotalIgnoresGuest(t *testing.T) {
 	}
 }
 
-func TestUsagePercentZeroDelta(t *testing.T) {
+func TestBreakdownZeroDelta(t *testing.T) {
 	s := cpu.TimesStat{User: 1, Idle: 1}
-	if got := usagePercent(s, s); got != 0 {
-		t.Fatalf("want 0, got %v", got)
+	if got := breakdown(s, s); got != (CPUStats{}) {
+		t.Fatalf("want zero stats, got %+v", got)
 	}
 }
