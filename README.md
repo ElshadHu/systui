@@ -5,6 +5,8 @@ metrics of the system in a user-friendly manner.
 
 Right now it shows, refreshing every second:
 
+- a top bar with memory pressure, swap, compressed memory on macOS
+  and a one line insight that says what is wrong, or `All normal`
 - CPU and memory usage as bars
 - a CPU breakdown with user, sys, idle, nice, iowait, irq, softirq, steal
   and guest percentages

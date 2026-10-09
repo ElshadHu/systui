@@ -2,41 +2,13 @@ package ui
 
 import (
 	"strings"
-	"unicode/utf8"
+
+	"charm.land/lipgloss/v2"
 )
-
-const (
-	stylePrefix = "\x1b["
-	styleSuffix = "m"
-)
-
-// visibleWidth returns how many terminal columns s occupies
-func visibleWidth(s string) int {
-	return utf8.RuneCountInString(stripStyles(s))
-}
-
-// stripStyles removes the color and bold sequences
-func stripStyles(s string) string {
-	var b strings.Builder
-	for {
-		start := strings.Index(s, stylePrefix)
-		if start < 0 {
-			b.WriteString(s)
-			return b.String()
-		}
-		b.WriteString(s[:start])
-		rest := s[start:]
-		end := strings.Index(rest, styleSuffix)
-		if end < 0 {
-			return b.String()
-		}
-		s = rest[end+len(styleSuffix):]
-	}
-}
 
 // padRight extends s with spaces until it occupies width columns
 func padRight(s string, width int) string {
-	gap := width - visibleWidth(s)
+	gap := width - lipgloss.Width(s)
 	if gap <= 0 {
 		return s
 	}
@@ -65,7 +37,7 @@ func fitColumns(sep string, width int, panels ...[]string) []string {
 	for _, p := range panels {
 		need := widest(p)
 		if len(group) > 0 {
-			need += visibleWidth(" " + sep + " ")
+			need += lipgloss.Width(" " + sep + " ")
 		}
 		if width > 0 && len(group) > 0 && used+need > width {
 			out = append(out, joinColumns(sep, group...)...)
@@ -112,7 +84,7 @@ func tallest(panels [][]string) int {
 func widest(lines []string) int {
 	n := 0
 	for _, line := range lines {
-		if w := visibleWidth(line); w > n {
+		if w := lipgloss.Width(line); w > n {
 			n = w
 		}
 	}

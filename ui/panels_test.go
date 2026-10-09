@@ -5,12 +5,6 @@ import (
 	"testing"
 )
 
-func TestVisibleWidthIgnoresStyles(t *testing.T) {
-	if got := visibleWidth(renderBar(50, 10)); got != 12 {
-		t.Fatalf("want 12, got %d", got)
-	}
-}
-
 func TestJoinColumnsAlignsRaggedPanels(t *testing.T) {
 	got := joinColumns("|", []string{"ab", "c"}, []string{"x"})
 	assertLines(t, []string{"ab | x", "c  |  "}, got)
