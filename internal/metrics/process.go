@@ -3,34 +3,47 @@ package metrics
 import (
 	"os/user"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/process"
 )
 
-// ProcessStats is one row of the process table
+// ProcessStats is one live process
 type ProcessStats struct {
 	PID     int32
+	PPID    int32
+	UID     uint32
 	Name    string
-	CPU     float64
-	Mem     float64
+	Exe     string
+	Argv0   string
+	Cmdline string
 	User    string
+	Status  string
+	CPU     float64
+	Memory  uint64
 	Started time.Time
+}
+
+// trackedProcess keeps the fields that never change for one process identity
+type trackedProcess struct {
+	proc    *process.Process
+	created int64
+	stats   ProcessStats
 }
 
 // ProcessSampler keeps a Process per PID across samples so that
 // Percent can measure CPU since the previous call
 type ProcessSampler struct {
 	mu      sync.Mutex
-	tracked map[int32]*process.Process
+	tracked map[int32]*trackedProcess
 	users   map[uint32]string
 }
 
 func NewProcessSampler() *ProcessSampler {
 	return &ProcessSampler{
-		tracked: make(map[int32]*process.Process),
+		tracked: make(map[int32]*trackedProcess),
 		users:   make(map[uint32]string),
 	}
 }
@@ -44,28 +57,16 @@ func (s *ProcessSampler) Sample() ([]ProcessStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	vm, err := mem.VirtualMemory()
-	if err != nil {
-		return nil, err
-	}
 
 	seen := make(map[int32]bool, len(pids))
 	stats := make([]ProcessStats, 0, len(pids))
 	for _, pid := range pids {
-		p, ok := s.tracked[pid]
+		t, ok := s.identify(pid)
 		if !ok {
-			p, err = process.NewProcess(pid)
-			if err != nil {
-				continue
-			}
-			s.tracked[pid] = p
-		}
-		row, err := s.read(p, vm.Total)
-		if err != nil {
 			continue
 		}
 		seen[pid] = true
-		stats = append(stats, row)
+		stats = append(stats, s.read(t))
 	}
 
 	for pid := range s.tracked {
@@ -76,54 +77,86 @@ func (s *ProcessSampler) Sample() ([]ProcessStats, error) {
 	return stats, nil
 }
 
-func (s *ProcessSampler) read(p *process.Process, memTotal uint64) (ProcessStats, error) {
-	name, err := p.Name()
+// identify returns the tracked entry for pid
+func (s *ProcessSampler) identify(pid int32) (*trackedProcess, bool) {
+	fresh, err := process.NewProcess(pid)
 	if err != nil {
-		return ProcessStats{}, err
+		return nil, false
 	}
-	cpu, err := p.Percent(0)
+	created, err := fresh.CreateTime()
 	if err != nil {
-		return ProcessStats{}, err
+		return nil, false
 	}
-	memInfo, err := p.MemoryInfo()
+	if t, ok := s.tracked[pid]; ok && t.created == created {
+		return t, true
+	}
+	name, err := fresh.Name()
 	if err != nil {
-		return ProcessStats{}, err
+		return nil, false
 	}
-	created, err := p.CreateTime()
-	if err != nil {
-		return ProcessStats{}, err
+	t := &trackedProcess{
+		proc:    fresh,
+		created: created,
+		stats: ProcessStats{
+			PID:     pid,
+			Name:    name,
+			Started: time.UnixMilli(created),
+		},
 	}
-	return ProcessStats{
-		PID:     p.Pid,
-		Name:    name,
-		CPU:     cpu,
-		Mem:     memPercent(memInfo.RSS, memTotal),
-		User:    s.username(p),
-		Started: time.UnixMilli(created),
-	}, nil
+	if ppid, err := fresh.Ppid(); err == nil {
+		t.stats.PPID = ppid
+	}
+	if exe, err := fresh.Exe(); err == nil {
+		t.stats.Exe = exe
+	}
+	if args, err := fresh.CmdlineSlice(); err == nil && len(args) > 0 {
+		t.stats.Argv0 = args[0]
+		t.stats.Cmdline = strings.Join(args, " ")
+	}
+	t.stats.UID, t.stats.User = s.owner(fresh)
+	s.tracked[pid] = t
+	return t, true
 }
 
-// username resolves the real UID once and reuses it for later samples
-func (s *ProcessSampler) username(p *process.Process) string {
+// read refreshes the fields that change between samples
+func (s *ProcessSampler) read(t *trackedProcess) ProcessStats {
+	row := t.stats
+	if cpu, err := t.proc.Percent(0); err == nil {
+		row.CPU = cpu
+	}
+	row.Memory = processMemory(t.proc)
+	if status, err := readStatus(t.proc); err == nil {
+		row.Status = status
+	}
+	return row
+}
+
+// processMemory prefers the platform's footprint and falls back to resident size
+func processMemory(p *process.Process) uint64 {
+	if n, ok := readFootprint(p.Pid); ok {
+		return n
+	}
+	info, err := p.MemoryInfo()
+	if err != nil {
+		return 0
+	}
+	return info.RSS
+}
+
+// owner resolves the real UID once and reuses it for later samples
+func (s *ProcessSampler) owner(p *process.Process) (uint32, string) {
 	uids, err := p.Uids()
 	if err != nil || len(uids) == 0 {
-		return "-"
+		return 0, "-"
 	}
 	uid := uids[0]
 	if name, ok := s.users[uid]; ok {
-		return name
+		return uid, name
 	}
 	name := strconv.FormatUint(uint64(uid), 10)
 	if u, err := user.LookupId(name); err == nil {
 		name = u.Username
 	}
 	s.users[uid] = name
-	return name
-}
-
-func memPercent(rss, total uint64) float64 {
-	if total == 0 {
-		return 0
-	}
-	return float64(rss) / float64(total) * 100
+	return uid, name
 }
