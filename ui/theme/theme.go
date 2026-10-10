@@ -37,6 +37,17 @@ type Glyphs struct {
 	BarRight   string
 	BarEighths []string
 	BarTrack   string
+	Expanded   string
+	Collapsed  string
+	More       string
+	Above      string
+	Below      string
+	Enter      string
+	Paused     string
+	Stopped    string
+	Zombie     string
+	Foreign    string
+	Ellipsis   string
 }
 
 type Theme struct {
@@ -66,6 +77,17 @@ var glyphs = Glyphs{
 	BarRight:   "▏",
 	BarEighths: []string{"▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"},
 	BarTrack:   "░",
+	Expanded:   "▼",
+	Collapsed:  "▶",
+	More:       "…",
+	Above:      "▲",
+	Below:      "▼",
+	Enter:      "⏎",
+	Paused:     "⏸",
+	Stopped:    "‖",
+	Zombie:     "†",
+	Foreign:    "◌",
+	Ellipsis:   "…",
 }
 
 var dark = Palette{
