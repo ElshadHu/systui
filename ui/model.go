@@ -20,7 +20,6 @@ const (
 	cpuColWidth     = 16
 	memColWidth     = 18
 	topBarLines     = 2
-	pageStep        = 10
 )
 
 // tickMsg is sent by the tick command once per refreshInterval
@@ -40,7 +39,7 @@ type Model struct {
 	theme    theme.Theme
 	sampler  *metrics.CPUSampler
 	procs    *metrics.ProcessSampler
-	trends   *apps.Trends
+	history  *apps.Histories
 	cpu      metrics.CPUStats
 	mem      metrics.MemStats
 	pressure metrics.PressureLevel
@@ -54,6 +53,7 @@ type Model struct {
 	apps     appsState
 	uid      uint32
 	now      time.Time
+	sampling bool
 }
 
 // New returns a Model ready to be passed to tea.NewProgram
@@ -66,7 +66,7 @@ func New(t theme.Theme) (Model, error) {
 		theme:    t,
 		sampler:  sampler,
 		procs:    metrics.NewProcessSampler(),
-		trends:   apps.NewTrends(),
+		history:  apps.NewHistories(),
 		barWidth: defaultBarWidth,
 		view:     AppsView,
 		uid:      uint32(os.Getuid()),
@@ -81,10 +81,15 @@ func tick() tea.Cmd {
 	})
 }
 
+// processTick fires once per refreshInterval from when the last walk started
 func processTick() tea.Cmd {
 	return tea.Tick(refreshInterval, func(time.Time) tea.Msg {
 		return processTickMsg{}
 	})
+}
+
+func processTickNow() tea.Cmd {
+	return func() tea.Msg { return processTickMsg{} }
 }
 
 // sampleProcesses runs the slow process walk off the update loop
@@ -96,7 +101,7 @@ func sampleProcesses(s *metrics.ProcessSampler) tea.Cmd {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tick(), sampleProcesses(m.procs))
+	return tea.Batch(tick(), processTickNow())
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -106,16 +111,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = m.refresh()
 		return m, tick()
 	case processTickMsg:
-		return m, sampleProcesses(m.procs)
+		if m.sampling {
+			return m, processTick()
+		}
+		m.sampling = true
+		return m, tea.Batch(sampleProcesses(m.procs), processTick())
 	case processesMsg:
 		m.now = time.Now()
+		m.sampling = false
 		m.procErr = msg.err
 		if msg.err == nil {
 			groups := apps.Build(msg.stats, m.apps.sort)
-			m.trends.Record(groups, m.now)
+			m.history.Record(groups)
 			m.apps.setGroups(groups, m.now)
 		}
-		return m, processTick()
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height

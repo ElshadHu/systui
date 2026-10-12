@@ -26,28 +26,30 @@ type Palette struct {
 
 // Glyphs pairs every semantic color with a symbol so that color is never the only signal
 type Glyphs struct {
-	OK         string
-	Warning    string
-	Critical   string
-	Accent     string
-	Dev        string
-	System     string
-	Dot        string
-	BarLeft    string
-	BarRight   string
-	BarEighths []string
-	BarTrack   string
-	Expanded   string
-	Collapsed  string
-	More       string
-	Above      string
-	Below      string
-	Enter      string
-	Paused     string
-	Stopped    string
-	Zombie     string
-	Foreign    string
-	Ellipsis   string
+	OK           string
+	Warning      string
+	Critical     string
+	Accent       string
+	Dev          string
+	System       string
+	Dot          string
+	BarLeft      string
+	BarRight     string
+	BarEighths   []string
+	BarTrack     string
+	Expanded     string
+	Collapsed    string
+	More         string
+	Above        string
+	Below        string
+	Enter        string
+	Paused       string
+	Stopped      string
+	Zombie       string
+	Foreign      string
+	Ellipsis     string
+	SparkLevels  []string
+	SparkMissing string
 }
 
 type Theme struct {
@@ -66,28 +68,30 @@ type Theme struct {
 }
 
 var glyphs = Glyphs{
-	OK:         "●",
-	Warning:    "⚠",
-	Critical:   "✖",
-	Accent:     "▌",
-	Dev:        "◆",
-	System:     "◇",
-	Dot:        "·",
-	BarLeft:    "▕",
-	BarRight:   "▏",
-	BarEighths: []string{"▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"},
-	BarTrack:   "░",
-	Expanded:   "▼",
-	Collapsed:  "▶",
-	More:       "…",
-	Above:      "▲",
-	Below:      "▼",
-	Enter:      "⏎",
-	Paused:     "⏸",
-	Stopped:    "‖",
-	Zombie:     "†",
-	Foreign:    "◌",
-	Ellipsis:   "…",
+	OK:           "●",
+	Warning:      "⚠",
+	Critical:     "✖",
+	Accent:       "▌",
+	Dev:          "◆",
+	System:       "◇",
+	Dot:          "·",
+	BarLeft:      "▕",
+	BarRight:     "▏",
+	BarEighths:   []string{"▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"},
+	BarTrack:     "░",
+	Expanded:     "▼",
+	Collapsed:    "▶",
+	More:         "…",
+	Above:        "▲",
+	Below:        "▼",
+	Enter:        "⏎",
+	Paused:       "⏸",
+	Stopped:      "‖",
+	Zombie:       "†",
+	Foreign:      "◌",
+	Ellipsis:     "…",
+	SparkLevels:  []string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"},
+	SparkMissing: "·",
 }
 
 var dark = Palette{

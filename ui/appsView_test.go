@@ -12,8 +12,8 @@ import (
 
 func TestFitAppsColumnsDropsFromTheRight(t *testing.T) {
 	cases := []struct {
-		width       int
-		procs, flag bool
+		width        int
+		procs, spark bool
 	}{
 		{120, true, true},
 		{60, true, false},
@@ -21,7 +21,7 @@ func TestFitAppsColumnsDropsFromTheRight(t *testing.T) {
 	}
 	for _, c := range cases {
 		got := fitAppsColumns(c.width)
-		if got.procs != c.procs || got.flag != c.flag || got.name < minNameColumn {
+		if got.procs != c.procs || got.spark != c.spark || got.name < minNameColumn {
 			t.Errorf("width %d: got %+v", c.width, got)
 		}
 	}

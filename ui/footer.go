@@ -1,6 +1,10 @@
 package ui
 
-import "strings"
+import (
+	"strings"
+
+	"charm.land/lipgloss/v2"
+)
 
 type keyHint struct {
 	key  string
@@ -29,5 +33,21 @@ func (m Model) footer() string {
 	for i, h := range hints {
 		parts[i] = t.Accent.Render(h.key) + " " + t.Muted.Render(h.word)
 	}
-	return strings.Join(parts, "  ")
+	keys := strings.Join(parts, "  ")
+	if m.view != AppsView || m.apps.typing || !fitAppsColumns(m.width).spark {
+		return keys
+	}
+	legend := m.trendLegend()
+	if lipgloss.Width(keys)+2+lipgloss.Width(legend) > m.width {
+		return keys
+	}
+	return alignEnds(keys, legend, m.width)
+}
+
+// trendLegend explains the sparkline column in one line, shown when it fits
+func (m Model) trendLegend() string {
+	t := m.theme
+	levels := t.Glyphs.SparkLevels
+	return t.Accent.Render(levels[0]+levels[2]+levels[5]) + " " +
+		t.Muted.Render("trend: last 20 s, one bar per second, newest on the right")
 }

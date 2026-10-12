@@ -15,12 +15,12 @@ const (
 	memColumn      = 8
 	cpuColumn      = 7
 	procsColumn    = 5
-	flagColumn     = 14
 	columnGap      = 3
 	minNameColumn  = 18
+	maxNameColumn  = 40
 	memberIndent   = 5
-	cpuWarnPercent = 10
-	cpuHighPercent = 50
+	cpuWarnPercent = 25
+	cpuHighPercent = 60
 	memWarnBytes   = 1 << 30
 	memHighBytes   = 2 << 30
 )
@@ -30,11 +30,11 @@ const (
 type columns struct {
 	name  int
 	procs bool
-	flag  bool
+	spark bool
 }
 
 func fitAppsColumns(width int) columns {
-	c := columns{procs: true, flag: true}
+	c := columns{procs: true, spark: true}
 	if width <= 0 {
 		c.name = 32
 		return c
@@ -44,21 +44,21 @@ func fitAppsColumns(width int) columns {
 		if c.procs {
 			n += columnGap + procsColumn
 		}
-		if c.flag {
-			n += columnGap + flagColumn
+		if c.spark {
+			n += columnGap + sparkColumn
 		}
 		return n
 	}
 	c.name = width - 1 - fixed()
 	if c.name < minNameColumn {
-		c.flag = false
+		c.spark = false
 		c.name = width - 1 - fixed()
 	}
 	if c.name < minNameColumn {
 		c.procs = false
 		c.name = width - 1 - fixed()
 	}
-	c.name = max(c.name, minNameColumn)
+	c.name = min(max(c.name, minNameColumn), maxNameColumn)
 	return c
 }
 
@@ -87,12 +87,13 @@ func (m Model) appsHeader(cols columns) string {
 	paint := m.painter(true)
 	name := paint(t.Muted)
 	mem, cpu := paint(t.Muted), paint(t.Muted)
-	memTitle, cpuTitle := "MEM", "CPU"
+	memTitle, cpuTitle, sparkTitle := "MEM", "CPU", "CPU"
 	if m.apps.sort == apps.ByMemory {
-		mem, memTitle = paint(t.Accent), "MEM "+t.Glyphs.Expanded
+		mem, memTitle, sparkTitle = paint(t.Accent), "MEM "+t.Glyphs.Expanded, "MEM"
 	} else {
 		cpu, cpuTitle = paint(t.Accent), "CPU "+t.Glyphs.Expanded
 	}
+	sparkTitle = strings.Repeat(" ", sparkGap) + sparkTitle + " TREND " + t.Glyphs.Dot + " 1 bar = 1s"
 	cells := []cell{
 		{name, " APP", cols.name, false},
 		{mem, memTitle, memColumn, true},
@@ -101,10 +102,15 @@ func (m Model) appsHeader(cols columns) string {
 	if cols.procs {
 		cells = append(cells, cell{paint(t.Muted), "PROCS", procsColumn, true})
 	}
-	if cols.flag {
-		cells = append(cells, cell{paint(t.Muted), "", flagColumn, false})
+	if cols.spark {
+		cells = append(cells, cell{paint(t.Muted), sparkTitle, sparkColumn, false})
 	}
-	return joinCells(cells, paint(t.Muted))
+	return m.fillLine(joinCells(cells, paint(t.Muted)), paint(t.Muted))
+}
+
+// fillLine pads a line to the terminal width so a painted background reaches the edge
+func (m Model) fillLine(line string, style lipgloss.Style) string {
+	return line + style.Render(strings.Repeat(" ", max(m.width-lipgloss.Width(line), 0)))
 }
 
 // cell is one column of a row: its style, text, width and alignment
@@ -173,7 +179,7 @@ func (m Model) appsRow(r row, cols columns, selected bool) string {
 	case moreRow:
 		cells = m.moreCells(r.hidden, cols, paint)
 	}
-	return marker + joinCells(cells, paint(t.Muted))
+	return m.fillLine(marker+joinCells(cells, paint(t.Muted)), paint(t.Muted))
 }
 
 func (m Model) groupCells(g *apps.Group, cols columns, text lipgloss.Style, paint func(lipgloss.Style) lipgloss.Style) []cell {
@@ -202,9 +208,12 @@ func (m Model) groupCells(g *apps.Group, cols columns, text lipgloss.Style, pain
 	if cols.procs {
 		cells = append(cells, cell{paint(t.Muted), strconv.Itoa(len(g.Members)), procsColumn, true})
 	}
-	if cols.flag {
-		style, flag := m.groupFlag(g)
-		cells = append(cells, cell{paint(style), flag, flagColumn, false})
+	if cols.spark {
+		trend := ""
+		if g.Kind != apps.Small {
+			trend = m.sparkline(g.ID, text, paint)
+		}
+		cells = append(cells, cell{text, trend, sparkColumn, false})
 	}
 	return cells
 }
@@ -219,8 +228,8 @@ func (m Model) memberCells(member apps.Member, cols columns, text lipgloss.Style
 	if cols.procs {
 		cells = append(cells, cell{text, "", procsColumn, true})
 	}
-	if cols.flag {
-		cells = append(cells, cell{text, "", flagColumn, false})
+	if cols.spark {
+		cells = append(cells, cell{text, "", sparkColumn, false})
 	}
 	return cells
 }
@@ -237,8 +246,8 @@ func (m Model) moreCells(hidden int, cols columns, paint func(lipgloss.Style) li
 	if cols.procs {
 		cells = append(cells, cell{muted, "", procsColumn, true})
 	}
-	if cols.flag {
-		cells = append(cells, cell{muted, t.Glyphs.Enter + " expand", flagColumn, false})
+	if cols.spark {
+		cells = append(cells, cell{muted, strings.Repeat(" ", sparkGap) + t.Glyphs.Enter + " expand", sparkColumn, false})
 	}
 	return cells
 }
@@ -258,19 +267,6 @@ func (m Model) stateGlyph(members []apps.Member) string {
 		return " " + g.Foreign
 	}
 	return ""
-}
-
-func (m Model) groupFlag(g *apps.Group) (lipgloss.Style, string) {
-	t := m.theme
-	switch {
-	case g.CPU >= cpuHighPercent:
-		return t.Critical, t.Glyphs.Critical + " runaway CPU"
-	case g.CPU >= cpuWarnPercent:
-		return t.Warning, t.Glyphs.Warning + " high CPU"
-	case g.Kind == apps.Small:
-		return t.Muted, t.Glyphs.Enter + " expand"
-	}
-	return t.Muted, ""
 }
 
 func memoryText(n uint64) string {
