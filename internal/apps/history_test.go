@@ -1,33 +1,32 @@
 package apps
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
-func TestTrendsRecordEveryStepAndForgetGoneGroups(t *testing.T) {
-	tr := NewTrends()
-	start := time.Unix(1000, 0)
-	tr.Record([]Group{{ID: "a", Memory: 1}, {ID: "b", Memory: 9}}, start)
-	tr.Record([]Group{{ID: "a", Memory: 2}}, start.Add(3*time.Second))
-	tr.Record([]Group{{ID: "a", Memory: 3}}, start.Add(historyStep))
-	got := tr.Of("a")
-	if len(got) != 2 || got[0] != 1 || got[1] != 3 {
-		t.Fatalf("want [1 3], got %v", got)
+func TestHistoriesRecordBothMetricsAndForgetGoneGroups(t *testing.T) {
+	hs := NewHistories()
+	hs.Record([]Group{{ID: "a", CPU: 1, Memory: 10}, {ID: "b", CPU: 9, Memory: 90}})
+	hs.Record([]Group{{ID: "a", CPU: 2, Memory: 20}})
+	got := hs.Of("a")
+	if len(got.CPU) != 2 || got.CPU[0] != 1 || got.CPU[1] != 2 {
+		t.Fatalf("want CPU [1 2], got %v", got.CPU)
 	}
-	if tr.Of("b") != nil {
+	if len(got.Memory) != 2 || got.Memory[0] != 10 || got.Memory[1] != 20 {
+		t.Fatalf("want memory [10 20], got %v", got.Memory)
+	}
+	if gone := hs.Of("b"); gone.CPU != nil || gone.Memory != nil {
 		t.Fatal("vanished group should be forgotten")
 	}
 }
 
-func TestHistoryRingWrapsOldestFirst(t *testing.T) {
+func TestHistoryKeepsTheLastReadingsOldestFirst(t *testing.T) {
 	var h History
-	now := time.Unix(0, 0)
-	for i := 0; i < historyLength+5; i++ {
-		h.record(now.Add(time.Duration(i)*historyStep), uint64(i))
+	for i := 0; i < HistoryLength+5; i++ {
+		h.record(float64(i), uint64(i))
 	}
-	got := h.Values()
-	if len(got) != historyLength || got[0] != 5 || got[historyLength-1] != historyLength+4 {
-		t.Fatalf("ring should hold the last %d values oldest first, got %v", historyLength, got)
+	if len(h.CPU) != HistoryLength || h.CPU[0] != 5 || h.CPU[HistoryLength-1] != HistoryLength+4 {
+		t.Fatalf("want the last %d values oldest first, got %v", HistoryLength, h.CPU)
+	}
+	if len(h.Memory) != HistoryLength || h.Memory[0] != 5 {
+		t.Fatalf("memory should match CPU, got %v", h.Memory)
 	}
 }

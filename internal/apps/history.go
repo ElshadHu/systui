@@ -1,50 +1,38 @@
 package apps
 
-import "time"
+const HistoryLength = 20
 
-const (
-	historyLength = 60
-	historyStep   = 10 * time.Second
-)
-
-// History is a ring of memory samples, one per historyStep, oldest first in Values
+// History is the last HistoryLength CPU and memory readings of one group
 type History struct {
-	samples [historyLength]uint64
-	count   int
-	next    int
-	last    time.Time
+	CPU    []float64
+	Memory []uint64
 }
 
-func (h *History) record(now time.Time, memory uint64) {
-	if !h.last.IsZero() && now.Sub(h.last) < historyStep {
-		return
+func (h *History) record(cpu float64, memory uint64) {
+	h.CPU = keepLast(h.CPU, cpu)
+	h.Memory = keepLast(h.Memory, memory)
+}
+
+func keepLast[T any](list []T, v T) []T {
+	if len(list) < HistoryLength {
+		return append(list, v)
 	}
-	h.samples[h.next] = memory
-	h.next = (h.next + 1) % historyLength
-	h.count = min(h.count+1, historyLength)
-	h.last = now
+	copy(list, list[1:])
+	list[HistoryLength-1] = v
+	return list
 }
 
-func (h *History) Values() []uint64 {
-	out := make([]uint64, 0, h.count)
-	start := (h.next - h.count + historyLength) % historyLength
-	for i := 0; i < h.count; i++ {
-		out = append(out, h.samples[(start+i)%historyLength])
-	}
-	return out
-}
-
-// Trends keeps a memory History per group across samples
-type Trends struct {
+// Histories keeps a History per group across samples
+type Histories struct {
 	byGroup map[string]*History
 }
 
-func NewTrends() *Trends {
-	return &Trends{byGroup: make(map[string]*History)}
+func NewHistories() *Histories {
+	return &Histories{byGroup: make(map[string]*History)}
 }
 
-// Record adds the current memory of every group and forgets groups that are gone
-func (t *Trends) Record(groups []Group, now time.Time) {
+// Record adds the current CPU and memory of every group and forgets groups that are gone
+func (t *Histories) Record(groups []Group) {
 	seen := make(map[string]bool, len(groups))
 	for _, g := range groups {
 		seen[g.ID] = true
@@ -53,7 +41,7 @@ func (t *Trends) Record(groups []Group, now time.Time) {
 			h = &History{}
 			t.byGroup[g.ID] = h
 		}
-		h.record(now, g.Memory)
+		h.record(g.CPU, g.Memory)
 	}
 	for id := range t.byGroup {
 		if !seen[id] {
@@ -62,11 +50,11 @@ func (t *Trends) Record(groups []Group, now time.Time) {
 	}
 }
 
-// Of returns the recorded memory of one group, oldest first
-func (t *Trends) Of(id string) []uint64 {
+// Of returns the readings of one group
+func (t *Histories) Of(id string) History {
 	h, ok := t.byGroup[id]
 	if !ok {
-		return nil
+		return History{}
 	}
-	return h.Values()
+	return *h
 }
