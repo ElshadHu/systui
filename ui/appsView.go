@@ -108,6 +108,19 @@ func (m Model) appsHeader(cols columns) string {
 	return m.fillLine(joinCells(cells, paint(t.Muted)), paint(t.Muted))
 }
 
+// headerSortAt returns the sort key for the MEM or CPU header cell at column x
+func headerSortAt(cols columns, x int) (apps.SortKey, bool) {
+	memStart := cols.name + columnGap
+	cpuStart := memStart + memColumn + columnGap
+	switch {
+	case x >= memStart && x < memStart+memColumn:
+		return apps.ByMemory, true
+	case x >= cpuStart && x < cpuStart+cpuColumn:
+		return apps.ByCPU, true
+	}
+	return 0, false
+}
+
 // fillLine pads a line to the terminal width so a painted background reaches the edge
 func (m Model) fillLine(line string, style lipgloss.Style) string {
 	return line + style.Render(strings.Repeat(" ", max(m.width-lipgloss.Width(line), 0)))

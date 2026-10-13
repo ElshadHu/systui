@@ -132,6 +132,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+	case tea.MouseClickMsg:
+		return m.handleClick(msg)
+	case tea.MouseWheelMsg:
+		return m.handleWheel(msg)
 	}
 	return m, nil
 }
@@ -236,6 +240,14 @@ func (m *Model) refresh() error {
 	return nil
 }
 
+// tabBarLine is the screen line the tab bar is drawn on
+func (m Model) tabBarLine() int {
+	if m.err != nil {
+		return topBarLines + 1
+	}
+	return topBarLines
+}
+
 // listHeight is the number of lines left for Apps rows under the header
 func (m Model) listHeight() int {
 	if m.height <= 0 {
@@ -271,6 +283,7 @@ func (m Model) View() tea.View {
 
 	v := tea.NewView(strings.Join(lines, "\n"))
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	v.BackgroundColor = m.theme.Colors.Background
 	v.ForegroundColor = m.theme.Colors.Primary
 	return v

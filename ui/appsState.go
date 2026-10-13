@@ -208,6 +208,22 @@ func (s *appsState) toggle() {
 	s.expand()
 }
 
+// click puts the cursor on a row
+func (s *appsState) click(id rowID) {
+	was := s.selected
+	s.selected = id
+	r, ok := s.current()
+	if !ok {
+		return
+	}
+	switch {
+	case r.kind == moreRow:
+		s.expand()
+	case r.kind == groupRow && was == id:
+		s.toggle()
+	}
+}
+
 func (s *appsState) expandAll() {
 	s.allExpanded = true
 	s.rebuild()

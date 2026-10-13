@@ -107,3 +107,93 @@ func TestTabBarShowsPositionAndPause(t *testing.T) {
 		t.Fatalf("tab bar should show the position and the pause, got %q", bar)
 	}
 }
+
+func click(m Model, x, y int) Model {
+	next, _ := m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	return next.(Model)
+}
+
+func wheel(m Model, button tea.MouseButton) Model {
+	next, _ := m.Update(tea.MouseWheelMsg{Button: button})
+	return next.(Model)
+}
+
+func TestMouseDrivesTheAppsView(t *testing.T) {
+	m := testModel(t)
+	tabLine, headerLine, firstRow := m.tabBarLine(), m.tabBarLine()+1, m.tabBarLine()+2
+	cols := fitAppsColumns(m.width)
+
+	m = click(m, firstRow+1, firstRow+1)
+	if m.apps.selected != (rowID{group: "code"}) {
+		t.Fatalf("clicking the second row should select VS Code, got %v", m.apps.selected)
+	}
+	m = click(m, 0, firstRow+1)
+	if m.apps.expanded != "code" || len(m.apps.rows) != 5 {
+		t.Fatalf("a second click on a group should open it, got expanded=%q rows=%d", m.apps.expanded, len(m.apps.rows))
+	}
+	m = click(m, 0, firstRow+1)
+	if m.apps.expanded != "" || len(m.apps.rows) != 3 {
+		t.Fatalf("a third click should close it again, got expanded=%q rows=%d", m.apps.expanded, len(m.apps.rows))
+	}
+
+	m = click(m, 0, firstRow)
+	m = click(m, 0, firstRow)
+	m = click(m, 0, firstRow+6)
+	if m.apps.showAll != "chrome" || len(m.apps.rows) != 10 {
+		t.Fatalf("one click on the more row should show every member, got showAll=%q rows=%d", m.apps.showAll, len(m.apps.rows))
+	}
+
+	m = wheel(m, tea.MouseWheelDown)
+	m = wheel(m, tea.MouseWheelDown)
+	if m.apps.selected != (rowID{group: "chrome", pid: 11}) {
+		t.Fatalf("two wheel notches down should move two rows, got %v", m.apps.selected)
+	}
+	m = wheel(m, tea.MouseWheelUp)
+	if m.apps.selected != (rowID{group: "chrome", pid: 10}) || !m.apps.frozen(m.now) {
+		t.Fatalf("wheel up should move back one row and pause the sort, got %v", m.apps.selected)
+	}
+
+	m = click(m, cols.name+columnGap+memColumn+columnGap, headerLine)
+	if m.apps.sort != 1 {
+		t.Fatal("clicking the CPU header should sort by CPU")
+	}
+	m = click(m, cols.name+columnGap, headerLine)
+	if m.apps.sort != 0 {
+		t.Fatal("clicking the MEM header should sort by memory")
+	}
+	m = click(m, 0, headerLine)
+	if m.apps.sort != 0 {
+		t.Fatal("clicking the APP header should change nothing")
+	}
+
+	m = click(m, 0, tabLine)
+	if m.view != OverviewView {
+		t.Fatal("clicking the first tab should switch to Overview")
+	}
+	m = click(m, tabWidth(OverviewView)+len(tabGap), tabLine)
+	if m.view != AppsView {
+		t.Fatal("clicking the second tab should switch back to Apps")
+	}
+	m = click(m, m.width-1, tabLine)
+	if m.view != AppsView {
+		t.Fatal("clicking past the tabs should change nothing")
+	}
+}
+
+func TestRowAtSkipsTheAboveMarker(t *testing.T) {
+	m := testModel(t)
+	m.height = 8
+	m.apps.expandAll()
+	m.apps.moveTo(len(m.apps.rows) - 1)
+	shown, above, _ := m.apps.viewport(m.listHeight())
+	if above == 0 {
+		t.Fatal("the cursor at the end should leave rows above the viewport")
+	}
+	first := m.tabBarLine() + 3
+	if r, ok := m.rowAt(first); !ok || r.id != shown[0].id {
+		t.Fatalf("the line under the marker should be the first shown row, got %v", r.id)
+	}
+	if _, ok := m.rowAt(first - 1); ok {
+		t.Fatal("the marker line is not a row")
+	}
+}
