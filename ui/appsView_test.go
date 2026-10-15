@@ -90,9 +90,9 @@ func TestKeysDriveTheAppsView(t *testing.T) {
 	if m.apps.filter != "" || len(m.apps.rows) != 9 {
 		t.Fatalf("esc should clear the filter and keep Chrome open, got %d rows", len(m.apps.rows))
 	}
-	m = press(m, "1")
+	m = press(m, "2")
 	if m.view != OverviewView {
-		t.Fatal("1 should switch to Overview")
+		t.Fatal("2 should switch to Overview")
 	}
 	if !strings.Contains(ansi.Strip(m.View().Content), "1-5 view") {
 		t.Fatal("overview footer should list the view keys")
@@ -166,13 +166,13 @@ func TestMouseDrivesTheAppsView(t *testing.T) {
 		t.Fatal("clicking the APP header should change nothing")
 	}
 
-	m = click(m, 0, tabLine)
+	m = click(m, tabWidth(AppsView)+len(tabGap), tabLine)
 	if m.view != OverviewView {
-		t.Fatal("clicking the first tab should switch to Overview")
+		t.Fatal("clicking the second tab should switch to Overview")
 	}
-	m = click(m, tabWidth(OverviewView)+len(tabGap), tabLine)
+	m = click(m, 0, tabLine)
 	if m.view != AppsView {
-		t.Fatal("clicking the second tab should switch back to Apps")
+		t.Fatal("clicking the first tab should switch back to Apps")
 	}
 	m = click(m, m.width-1, tabLine)
 	if m.view != AppsView {

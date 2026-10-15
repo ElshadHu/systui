@@ -10,16 +10,16 @@ import (
 type View int
 
 const (
-	OverviewView View = iota + 1
-	AppsView
+	AppsView View = iota + 1
+	OverviewView
 	DevView
 	AllView
 	TreeView
 )
 
 var viewNames = map[View]string{
-	OverviewView: "Overview",
 	AppsView:     "Apps",
+	OverviewView: "Overview",
 	DevView:      "Dev",
 	AllView:      "All",
 	TreeView:     "Tree",
@@ -39,7 +39,7 @@ func tabWidth(v View) int {
 // tabAt returns the view whose tab is drawn at column x of the tab bar
 func tabAt(x int) (View, bool) {
 	start := 0
-	for v := OverviewView; v <= TreeView; v++ {
+	for v := AppsView; v <= TreeView; v++ {
 		end := start + tabWidth(v)
 		if x >= start && x < end {
 			return v, true
@@ -54,7 +54,7 @@ func tabAt(x int) (View, bool) {
 func (m Model) tabBar(first, last, total int) string {
 	t := m.theme
 	tabs := make([]string, 0, len(viewNames))
-	for v := OverviewView; v <= TreeView; v++ {
+	for v := AppsView; v <= TreeView; v++ {
 		key := t.Accent.Render(tabKey(v))
 		name := t.Muted.Render(viewNames[v])
 		if v == m.view {
