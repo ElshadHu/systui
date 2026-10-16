@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/ElshadHu/systui/internal/apps"
 	"github.com/ElshadHu/systui/internal/metrics"
 	"github.com/ElshadHu/systui/internal/units"
 )
@@ -58,4 +59,32 @@ func Top(list []Insight, n int) []Insight {
 		ranked = ranked[:n]
 	}
 	return ranked
+}
+
+const (
+	peakMinBytes  = 1 << 30
+	peakDropBytes = 500 << 20
+)
+
+// Peak reports the app that fell furthest from a memory peak
+func Peak(groups []apps.Group) []Insight {
+	var found *apps.Group
+	var biggestDrop uint64
+	for i := range groups {
+		g := &groups[i]
+		if g.Kind == apps.Small || g.PeakMemory < peakMinBytes || g.Memory*2 >= g.PeakMemory {
+			continue
+		}
+		drop := g.PeakMemory - g.Memory
+		if drop < peakDropBytes || drop <= biggestDrop {
+			continue
+		}
+		found, biggestDrop = g, drop
+	}
+	if found == nil {
+		return nil
+	}
+	text := fmt.Sprintf("%s peaked at %s at %s, now %s",
+		found.Name, units.Compact(found.PeakMemory), found.PeakAt.Format("15:04"), units.Compact(found.Memory))
+	return []Insight{{Warning, text}}
 }

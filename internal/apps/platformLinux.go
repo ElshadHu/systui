@@ -1,4 +1,4 @@
-//go:build !darwin && !windows
+//go:build linux
 
 package apps
 
@@ -17,8 +17,7 @@ var systemPrefixes = []string{
 	"/sbin/",
 }
 
-// appOf treats every executable as a possible app root; the parent walk
-// then climbs to the top-most one below the session
+// appOf treats every executable as a possible app root
 func appOf(exe string) (id, name string, ok bool) {
 	return exe, filepath.Base(exe), true
 }

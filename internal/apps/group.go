@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ElshadHu/systui/internal/metrics"
 )
@@ -24,7 +25,19 @@ type SortKey int
 const (
 	ByMemory SortKey = iota
 	ByCPU
+	ByPeak
+	ByCPUTime
 )
+
+func (k SortKey) Family() SortKey {
+	switch k {
+	case ByPeak:
+		return ByMemory
+	case ByCPUTime:
+		return ByCPU
+	}
+	return k
+}
 
 const (
 	SystemGroupID = "system"
@@ -37,26 +50,48 @@ const (
 
 // Member is one process inside a group
 type Member struct {
-	PID     int32
-	PPID    int32
-	Label   string
-	Status  string
-	UID     uint32
-	CPU     float64
-	Memory  uint64
-	Exe     string
-	Started int64
-	Main    bool
+	PID        int32
+	PPID       int32
+	Label      string
+	Status     string
+	UID        uint32
+	CPU        float64
+	Memory     uint64
+	PeakMemory uint64
+	CPUTime    time.Duration
+	Exe        string
+	Started    int64
+	Main       bool
 }
 
 // Group is one row of the Apps view: an app, a tool, the system or the small bucket
 type Group struct {
-	ID      string
-	Name    string
-	Kind    Kind
-	CPU     float64
-	Memory  uint64
-	Members []Member
+	ID         string
+	Name       string
+	Kind       Kind
+	CPU        float64
+	Memory     uint64
+	PeakMemory uint64
+	PeakAt     time.Time
+	CPUTime    time.Duration
+	Started    time.Time
+	Members    []Member
+}
+
+// measures is what sorting compares, the same for a group and a member
+type measures struct {
+	cpu     float64
+	memory  uint64
+	peak    uint64
+	cpuTime time.Duration
+}
+
+func (g Group) measures() measures {
+	return measures{cpu: g.CPU, memory: g.Memory, peak: g.PeakMemory, cpuTime: g.CPUTime}
+}
+
+func (m Member) measures() measures {
+	return measures{cpu: m.CPU, memory: m.Memory, peak: m.PeakMemory, cpuTime: m.CPUTime}
 }
 
 var shells = map[string]bool{
@@ -65,9 +100,8 @@ var shells = map[string]bool{
 	"login": true,
 }
 
-// Build groups processes and sorts groups and members by key, with the
-// small bucket always last
-func Build(stats []metrics.ProcessStats, key SortKey) []Group {
+// Build groups processes, in no particular order
+func Build(stats []metrics.ProcessStats) []Group {
 	byPID := make(map[int32]*metrics.ProcessStats, len(stats))
 	for i := range stats {
 		byPID[stats[i].PID] = &stats[i]
@@ -85,15 +119,17 @@ func Build(stats []metrics.ProcessStats, key SortKey) []Group {
 			groups[id] = g
 		}
 		g.Members = append(g.Members, Member{
-			PID:     p.PID,
-			PPID:    p.PPID,
-			Label:   labelOf(p),
-			Status:  p.Status,
-			UID:     p.UID,
-			CPU:     p.CPU,
-			Memory:  p.Memory,
-			Exe:     p.Exe,
-			Started: p.Started.UnixMilli(),
+			PID:        p.PID,
+			PPID:       p.PPID,
+			Label:      labelOf(p),
+			Status:     p.Status,
+			UID:        p.UID,
+			CPU:        p.CPU,
+			Memory:     p.Memory,
+			PeakMemory: p.PeakMemory,
+			CPUTime:    p.CPUTime,
+			Exe:        p.Exe,
+			Started:    p.Started.UnixMilli(),
 		})
 	}
 
@@ -102,6 +138,7 @@ func Build(stats []metrics.ProcessStats, key SortKey) []Group {
 	for _, g := range groups {
 		total(g)
 		main := markMain(g)
+		g.Started = time.UnixMilli(main.Started)
 		if g.Kind == Tool {
 			g.Name = main.Label
 		}
@@ -117,7 +154,6 @@ func Build(stats []metrics.ProcessStats, key SortKey) []Group {
 		small.Name = strconv.Itoa(len(small.Members)) + " small processes"
 		list = append(list, small)
 	}
-	Sort(list, key)
 	return list
 }
 
@@ -127,7 +163,7 @@ func Sort(list []Group, key SortKey) {
 		if a.Kind == Small || b.Kind == Small {
 			return cmp.Compare(boolInt(a.Kind == Small), boolInt(b.Kind == Small))
 		}
-		return cmp.Or(compare(a.CPU, a.Memory, b.CPU, b.Memory, key), strings.Compare(a.Name, b.Name))
+		return cmp.Or(compare(a.measures(), b.measures(), key), strings.Compare(a.Name, b.Name))
 	})
 	for i := range list {
 		sortMembers(list[i].Members, key)
@@ -197,10 +233,11 @@ func isSystemPath(exe string) bool {
 }
 
 func total(g *Group) {
-	g.CPU, g.Memory = 0, 0
+	g.CPU, g.Memory, g.CPUTime = 0, 0, 0
 	for _, m := range g.Members {
 		g.CPU += m.CPU
 		g.Memory += m.Memory
+		g.CPUTime += m.CPUTime
 	}
 }
 
@@ -240,16 +277,23 @@ func labelMembers(g *Group, cmdlines map[int32]string) {
 
 func sortMembers(list []Member, key SortKey) {
 	slices.SortStableFunc(list, func(a, b Member) int {
-		return cmp.Or(compare(a.CPU, a.Memory, b.CPU, b.Memory, key), cmp.Compare(a.PID, b.PID))
+		return cmp.Or(compare(a.measures(), b.measures(), key), cmp.Compare(a.PID, b.PID))
 	})
 }
 
 // compare orders the larger value first for the chosen key
-func compare(aCPU float64, aMem uint64, bCPU float64, bMem uint64, key SortKey) int {
-	if key == ByCPU {
-		return cmp.Or(cmp.Compare(bCPU, aCPU), cmp.Compare(bMem, aMem))
+func compare(a, b measures, key SortKey) int {
+	byMemory := cmp.Compare(b.memory, a.memory)
+	byCPU := cmp.Compare(b.cpu, a.cpu)
+	switch key {
+	case ByCPU:
+		return cmp.Or(byCPU, byMemory)
+	case ByPeak:
+		return cmp.Or(cmp.Compare(b.peak, a.peak), byMemory, byCPU)
+	case ByCPUTime:
+		return cmp.Or(cmp.Compare(b.cpuTime, a.cpuTime), byCPU, byMemory)
 	}
-	return cmp.Or(cmp.Compare(bMem, aMem), cmp.Compare(bCPU, aCPU))
+	return cmp.Or(byMemory, byCPU)
 }
 
 // KeepOrder reorders next to match the order prev had

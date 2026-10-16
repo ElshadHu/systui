@@ -32,7 +32,7 @@ func TestHelpersJoinTheOutermostBundle(t *testing.T) {
 		proc(11, 10, "Google Chrome Helper (Renderer)", chromeRenderer, 800<<20),
 	}
 	stats[2].Cmdline = chromeRenderer + " --type=renderer --lang=en"
-	groups := Build(stats, ByMemory)
+	groups := sorted(Build(stats), ByMemory)
 	g := find(groups, "/Applications/Google Chrome.app")
 	if g == nil || g.Name != "Google Chrome" || g.Kind != App || len(g.Members) != 2 {
 		t.Fatalf("want one Chrome group with 2 members, got %+v", groups)
@@ -57,7 +57,7 @@ func TestChildWithoutBundleJoinsNearestAncestorBundle(t *testing.T) {
 		proc(21, 20, "Code Helper (Plugin)", plugin, 300<<20),
 		proc(22, 21, "node", "/usr/local/bin/node", 100<<20),
 	}
-	groups := Build(stats, ByMemory)
+	groups := sorted(Build(stats), ByMemory)
 	g := find(groups, "/Applications/Visual Studio Code.app")
 	if g == nil || len(g.Members) != 3 {
 		t.Fatalf("node should join VS Code, got %+v", groups)
@@ -75,7 +75,7 @@ func TestShellStopsTheWalk(t *testing.T) {
 		proc(31, 30, "zsh", "/bin/zsh", 5<<20),
 		proc(32, 31, "node", "/usr/local/bin/node", 600<<20),
 	}
-	groups := Build(stats, ByMemory)
+	groups := sorted(Build(stats), ByMemory)
 	g := find(groups, "/usr/local/bin/node")
 	if g == nil || g.Kind != Tool || g.Name != "node" {
 		t.Fatalf("shell child should be its own group, got %+v", groups)
@@ -92,7 +92,7 @@ func TestSystemPathsAndUnreadableRootProcesses(t *testing.T) {
 		{PID: 41, PPID: 1, Name: "secretd", UID: 0, User: "root"},
 		{PID: 42, PPID: 1, Name: "_mdnsresponder", UID: 65, User: "_mdnsresponder"},
 	}
-	groups := Build(stats, ByMemory)
+	groups := sorted(Build(stats), ByMemory)
 	g := find(groups, SystemGroupID)
 	if g == nil || g.Kind != System || len(g.Members) != 4 {
 		t.Fatalf("want 4 system members, got %+v", groups)
@@ -105,7 +105,7 @@ func TestQuietGroupsMergeIntoSmallBucketLast(t *testing.T) {
 		proc(51, 1, "tiny", "/opt/tiny", 1<<20),
 		proc(52, 1, "mini", "/opt/mini", 2<<20),
 	}
-	groups := Build(stats, ByMemory)
+	groups := sorted(Build(stats), ByMemory)
 	if len(groups) != 2 || groups[0].ID != "/opt/big" {
 		t.Fatalf("want big then the bucket, got %+v", groups)
 	}
@@ -123,7 +123,7 @@ func TestMainIsTheMemberWhoseParentIsOutside(t *testing.T) {
 		proc(21, 20, "Code Helper (Plugin)", plugin, 300<<20),
 		proc(22, 21, "gopls", "/Users/me/go/bin/gopls", 400<<20),
 	}
-	g := find(Build(stats, ByMemory), "/Applications/Visual Studio Code.app")
+	g := find(sorted(Build(stats), ByMemory), "/Applications/Visual Studio Code.app")
 	for _, m := range g.Members {
 		if m.Main != (m.PID == 20) {
 			t.Fatalf("Electron should be the only main member, got %+v", g.Members)
@@ -141,7 +141,7 @@ func TestToolGroupIsNamedByTheCommandItRunsAs(t *testing.T) {
 	stats[0].Argv0 = "claude"
 	stats[1].Argv0 = "ugrep"
 	stats[2].Argv0 = "-zsh"
-	groups := Build(stats, ByMemory)
+	groups := sorted(Build(stats), ByMemory)
 	g := find(groups, exe)
 	if g == nil || g.Name != "claude" || g.Members[1].Label != "ugrep" {
 		t.Fatalf("tool group and members should be named by argv[0], got %+v", g)
@@ -156,7 +156,7 @@ func TestAppleAppsAreAppsNotSystem(t *testing.T) {
 		proc(80, 1, "Terminal", "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal", 200<<20),
 		proc(81, 1, "Finder", "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder", 200<<20),
 	}
-	groups := Build(stats, ByMemory)
+	groups := sorted(Build(stats), ByMemory)
 	if g := find(groups, "/System/Applications/Utilities/Terminal.app"); g == nil || g.Kind != App {
 		t.Fatalf("Terminal should be an app, got %+v", groups)
 	}
@@ -171,8 +171,28 @@ func TestSortByCPU(t *testing.T) {
 		proc(61, 1, "busy", "/opt/busy", 60<<20),
 	}
 	stats[1].CPU = 40
-	groups := Build(stats, ByCPU)
+	groups := sorted(Build(stats), ByCPU)
 	if groups[0].Name != "busy" {
 		t.Fatalf("busy should lead by CPU, got %+v", groups)
+	}
+}
+
+func TestBuildSumsCPUTimeAndTakesTheMainStart(t *testing.T) {
+	stats := []metrics.ProcessStats{
+		proc(1, 0, "launchd", "/sbin/launchd", 10<<20),
+		proc(10, 1, "Google Chrome", chrome, 300<<20),
+		proc(11, 10, "Google Chrome Helper (Renderer)", chromeRenderer, 800<<20),
+	}
+	stats[1].CPUTime = time.Hour
+	stats[2].CPUTime = 30 * time.Minute
+	stats[2].PeakMemory = 1 << 30
+	g := find(Build(stats), "/Applications/Google Chrome.app")
+	if g == nil || g.CPUTime != 90*time.Minute || !g.Started.Equal(time.Unix(10, 0)) {
+		t.Fatalf("want 1h30m since the main process started, got %+v", g)
+	}
+	for _, m := range g.Members {
+		if m.PID == 11 && m.PeakMemory != 1<<30 {
+			t.Fatalf("members keep their own peak, got %+v", m)
+		}
 	}
 }
