@@ -1,6 +1,9 @@
 package units
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // Bytes shows a byte count with B, KB ...
 func Bytes(n uint64) string {
@@ -34,4 +37,18 @@ func Compact(n uint64) string {
 		return fmt.Sprintf("%.0f KB", float64(n)/(1<<10))
 	}
 	return fmt.Sprintf("%d B", n)
+}
+
+// Duration shows CPU time the way a person says it: 41s, 58m, 6h 12m, 2d 5h
+func Duration(d time.Duration) string {
+	const day = 24 * time.Hour
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < day:
+		return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
+	}
+	return fmt.Sprintf("%dd %dh", int(d/day), int(d.Hours())%24)
 }

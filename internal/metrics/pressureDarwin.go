@@ -14,7 +14,8 @@ const (
 	darwinPressureCritical = 4
 )
 
-func readPressure() (PressureLevel, error) {
+// ReadPressure asks the kernel for its memory pressure level
+func ReadPressure() (PressureLevel, error) {
 	level, err := unix.SysctlUint32("kern.memorystatus_vm_pressure_level")
 	if err != nil {
 		return PressureNormal, err

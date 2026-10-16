@@ -24,6 +24,19 @@ type ProcessStats struct {
 	CPU     float64
 	Memory  uint64
 	Started time.Time
+	Lifetime
+}
+
+// Lifetime is what a process has accumulated since it started
+type Lifetime struct {
+	PeakMemory uint64
+	CPUTime    time.Duration
+}
+
+// usage is what one sample reads for one process
+type usage struct {
+	Memory uint64
+	Lifetime
 }
 
 // trackedProcess keeps the fields that never change for one process identity
@@ -124,23 +137,24 @@ func (s *ProcessSampler) read(t *trackedProcess) ProcessStats {
 	if cpu, err := t.proc.Percent(0); err == nil {
 		row.CPU = cpu
 	}
-	row.Memory = processMemory(t.proc)
+	u := readUsage(t.proc)
+	row.Memory, row.Lifetime = u.Memory, u.Lifetime
 	if status, err := readStatus(t.proc); err == nil {
 		row.Status = status
 	}
 	return row
 }
 
-// processMemory prefers the platform's footprint and falls back to resident size
-func processMemory(p *process.Process) uint64 {
-	if n, ok := readFootprint(p.Pid); ok {
-		return n
+// portableUsage is what gopsutil can read everywhere
+func portableUsage(p *process.Process) usage {
+	var u usage
+	if info, err := p.MemoryInfo(); err == nil {
+		u.Memory = info.RSS
 	}
-	info, err := p.MemoryInfo()
-	if err != nil {
-		return 0
+	if times, err := p.Times(); err == nil {
+		u.CPUTime = time.Duration((times.User + times.System) * float64(time.Second))
 	}
-	return info.RSS
+	return u
 }
 
 // owner resolves the real UID once and reuses it for later samples

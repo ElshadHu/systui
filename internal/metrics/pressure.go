@@ -22,13 +22,6 @@ const (
 	fullStallCriticalPercent = 10
 )
 
-// ReadPressure returns the memory pressure level. macOS and Linux ask the kernel,
-// other systems derive it from available memory
-func ReadPressure() (PressureLevel, error) {
-	return readPressure()
-}
-
-// pressureFromAvailable is the fallback for kernels without a pressure signal
 func pressureFromAvailable(available, total uint64) PressureLevel {
 	if total == 0 {
 		return PressureNormal
