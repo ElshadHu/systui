@@ -16,12 +16,12 @@ func (m Model) footer() string {
 	t := m.theme
 	var hints []keyHint
 	switch {
-	case m.view == AppsView && m.apps.typing:
+	case m.listsApps() && m.apps.typing:
 		hints = []keyHint{{"type", "to filter"}, {"esc", "clear"}, {t.Glyphs.Enter, "done"}}
-	case m.view == AppsView:
+	case m.listsApps():
 		hints = []keyHint{
 			{"↑↓", "move"}, {"→←", "expand"}, {"E/C", "all"},
-			{"c m", "sort"}, {"/", "filter"}, {"1-5", "view"}, {"q", "quit"},
+			{"m p c t", "sort"}, {"/", "filter"}, {"1-5", "view"}, {"q", "quit"},
 		}
 		if m.apps.filter != "" {
 			hints = append(hints[:len(hints)-2], keyHint{"esc", "clear filter"}, hints[len(hints)-2], hints[len(hints)-1])
@@ -34,14 +34,24 @@ func (m Model) footer() string {
 		parts[i] = t.Accent.Render(h.key) + " " + t.Muted.Render(h.word)
 	}
 	keys := strings.Join(parts, "  ")
-	if m.view != AppsView || m.apps.typing || !fitAppsColumns(m.width).spark {
-		return keys
-	}
-	legend := m.trendLegend()
-	if lipgloss.Width(keys)+2+lipgloss.Width(legend) > m.width {
+	legend := m.legend()
+	if legend == "" || lipgloss.Width(keys)+2+lipgloss.Width(legend) > m.width {
 		return keys
 	}
 	return alignEnds(keys, legend, m.width)
+}
+
+// legend explains the tab's own column in one line, shown when it fits
+func (m Model) legend() string {
+	switch {
+	case m.apps.typing:
+		return ""
+	case m.view == LifetimeView:
+		return m.theme.Muted.Render("peak and CPU time since process start, group peak since systui start")
+	case m.view == AppsView && m.columns().has(sparkField):
+		return m.trendLegend()
+	}
+	return ""
 }
 
 // trendLegend explains the sparkline column in one line, shown when it fits

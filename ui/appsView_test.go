@@ -21,7 +21,7 @@ func TestFitAppsColumnsDropsFromTheRight(t *testing.T) {
 	}
 	for _, c := range cases {
 		got := fitAppsColumns(c.width)
-		if got.procs != c.procs || got.spark != c.spark || got.name < minNameColumn {
+		if got.has(procsField) != c.procs || got.has(sparkField) != c.spark || got.name < minNameColumn {
 			t.Errorf("width %d: got %+v", c.width, got)
 		}
 	}
@@ -153,11 +153,11 @@ func TestMouseDrivesTheAppsView(t *testing.T) {
 		t.Fatalf("wheel up should move back one row and pause the sort, got %v", m.apps.selected)
 	}
 
-	m = click(m, cols.name+columnGap+memColumn+columnGap, headerLine)
+	m = click(m, markerColumn+cols.name+columnGap+memColumn+columnGap, headerLine)
 	if m.apps.sort != 1 {
 		t.Fatal("clicking the CPU header should sort by CPU")
 	}
-	m = click(m, cols.name+columnGap, headerLine)
+	m = click(m, markerColumn+cols.name+columnGap, headerLine)
 	if m.apps.sort != 0 {
 		t.Fatal("clicking the MEM header should sort by memory")
 	}

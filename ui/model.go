@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -44,6 +45,8 @@ type Model struct {
 	mem      metrics.MemStats
 	pressure metrics.PressureLevel
 	insights []insight.Insight
+	system   []insight.Insight
+	peaks    []insight.Insight
 	err      error
 	procErr  error
 	barWidth int
@@ -121,9 +124,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sampling = false
 		m.procErr = msg.err
 		if msg.err == nil {
-			groups := apps.Build(msg.stats, m.apps.sort)
-			m.history.Record(groups)
-			m.apps.setGroups(groups, m.now)
+			m.installGroups(apps.Build(msg.stats))
 		}
 		return m, nil
 	case tea.WindowSizeMsg:
@@ -142,7 +143,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.now = time.Now()
-	if m.view == AppsView && m.apps.typing {
+	if m.listsApps() && m.apps.typing {
 		m.typeFilter(msg)
 		return m, nil
 	}
@@ -153,10 +154,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.view = View(msg.String()[0] - '0')
 		return m, nil
 	}
-	if m.view == AppsView {
+	if m.listsApps() {
 		m.appsKey(msg.String())
 	}
 	return m, nil
+}
+
+// listsApps is true on the tabs that show the grouped process rows
+func (m Model) listsApps() bool {
+	return m.view == AppsView || m.view == LifetimeView
 }
 
 func (m *Model) appsKey(key string) {
@@ -193,6 +199,10 @@ func (m *Model) appsKey(key string) {
 		s.setSort(apps.ByCPU)
 	case "m":
 		s.setSort(apps.ByMemory)
+	case "p":
+		s.setSort(apps.ByPeak)
+	case "t":
+		s.setSort(apps.ByCPUTime)
 	case "/":
 		s.typing = true
 	case "esc":
@@ -236,8 +246,22 @@ func (m *Model) refresh() error {
 	m.cpu = cpuStats
 	m.mem = memStats
 	m.pressure = pressure
-	m.insights = insight.Top(insight.System(cpuStats.Usage, pressure, memStats.SwapUsed), maxInsights)
+	m.system = insight.System(cpuStats.Usage, pressure, memStats.SwapUsed)
+	m.rankInsights()
 	return nil
+}
+
+// installGroups records a fresh sample into the history, orders it and refreshes the rows
+func (m *Model) installGroups(groups []apps.Group) {
+	m.history.Record(groups, m.now)
+	apps.Sort(groups, m.apps.sort)
+	m.peaks = insight.Peak(groups)
+	m.apps.setGroups(groups, m.now)
+	m.rankInsights()
+}
+
+func (m *Model) rankInsights() {
+	m.insights = insight.Top(slices.Concat(m.system, m.peaks), maxInsights)
 }
 
 // tabBarLine is the screen line the tab bar is drawn on
@@ -263,7 +287,7 @@ func (m Model) View() tea.View {
 	}
 
 	switch m.view {
-	case AppsView:
+	case AppsView, LifetimeView:
 		body := m.appsView(m.listHeight() + 1)
 		shown, _, _ := m.apps.viewport(m.listHeight())
 		first, last := m.apps.position(shown)

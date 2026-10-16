@@ -12,7 +12,7 @@ type View int
 const (
 	AppsView View = iota + 1
 	OverviewView
-	DevView
+	LifetimeView
 	AllView
 	TreeView
 )
@@ -20,7 +20,7 @@ const (
 var viewNames = map[View]string{
 	AppsView:     "Apps",
 	OverviewView: "Overview",
-	DevView:      "Dev",
+	LifetimeView: "Lifetime",
 	AllView:      "All",
 	TreeView:     "Tree",
 }

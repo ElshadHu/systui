@@ -19,13 +19,13 @@ func (m Model) handleClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.view != AppsView || m.procErr != nil {
+	if !m.listsApps() || m.procErr != nil {
 		return m, nil
 	}
 	s := &m.apps
 	headerLine := m.tabBarLine() + 1
 	if msg.Y == headerLine {
-		if key, ok := headerSortAt(fitAppsColumns(m.width), msg.X); ok {
+		if key, ok := headerSortAt(m.columns(), msg.X); ok {
 			s.setSort(key)
 		}
 		return m, nil
@@ -39,7 +39,7 @@ func (m Model) handleClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 
 // handleWheel moves the Apps cursor one row
 func (m Model) handleWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
-	if m.view != AppsView || m.procErr != nil {
+	if !m.listsApps() || m.procErr != nil {
 		return m, nil
 	}
 	m.now = time.Now()

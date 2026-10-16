@@ -17,7 +17,7 @@ func TestCPUSparklineFillsFromTheRightAndTopsOutAtHigh(t *testing.T) {
 	m := testModel(t)
 	m.apps.setSort(apps.ByCPU)
 	for _, cpu := range []float64{0, 30, 60, 250} {
-		m.history.Record([]apps.Group{{ID: "a", CPU: cpu}})
+		m.history.Record([]apps.Group{{ID: "a", CPU: cpu}}, m.now)
 	}
 	got := plainSparkline(m, "a")
 	levels := m.theme.Glyphs.SparkLevels
@@ -33,8 +33,8 @@ func TestCPUSparklineFillsFromTheRightAndTopsOutAtHigh(t *testing.T) {
 func TestMemorySparklineScalesToTheRowAndShowsGrowth(t *testing.T) {
 	m := testModel(t)
 	m.apps.setSort(apps.ByMemory)
-	m.history.Record([]apps.Group{{ID: "flat", Memory: 1 << 30}, {ID: "wobble", Memory: 100 << 20}, {ID: "grow", Memory: 1 << 30}})
-	m.history.Record([]apps.Group{{ID: "flat", Memory: 1<<30 + 2<<20}, {ID: "wobble", Memory: 102 << 20}, {ID: "grow", Memory: 1<<30 + 140<<20}})
+	m.history.Record([]apps.Group{{ID: "flat", Memory: 1 << 30}, {ID: "wobble", Memory: 100 << 20}, {ID: "grow", Memory: 1 << 30}}, m.now)
+	m.history.Record([]apps.Group{{ID: "flat", Memory: 1<<30 + 2<<20}, {ID: "wobble", Memory: 102 << 20}, {ID: "grow", Memory: 1<<30 + 140<<20}}, m.now)
 	levels := m.theme.Glyphs.SparkLevels
 
 	flat := plainSparkline(m, "flat")
@@ -54,7 +54,7 @@ func TestMemorySparklineScalesToTheRowAndShowsGrowth(t *testing.T) {
 func TestSmallBucketHasNoTrend(t *testing.T) {
 	m := testModel(t)
 	small := &apps.Group{ID: apps.SmallGroupID, Name: "3 small processes", Kind: apps.Small, Memory: 1 << 20}
-	m.history.Record([]apps.Group{*small})
+	m.history.Record([]apps.Group{*small}, m.now)
 	cells := m.groupCells(small, fitAppsColumns(120), m.theme.Primary, m.painter(false))
 	if trend := ansi.Strip(cells[len(cells)-1].text); strings.TrimSpace(trend) != "" {
 		t.Fatalf("small bucket should have a blank trend, got %q", trend)
@@ -75,7 +75,7 @@ func TestSparklineHeaderNamesTheSortedMetric(t *testing.T) {
 
 func TestSparklineKeepsRowWidthWhenSelected(t *testing.T) {
 	m := testModel(t)
-	m.history.Record(m.apps.groups)
+	m.history.Record(m.apps.groups, m.now)
 	cols := fitAppsColumns(120)
 	r := m.apps.rows[0]
 	plain, selected := m.appsRow(r, cols, false), m.appsRow(r, cols, true)

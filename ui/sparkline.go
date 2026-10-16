@@ -21,10 +21,10 @@ const (
 )
 
 // sparkline draws the history of one group for the metric
-func (m Model) sparkline(id string, text lipgloss.Style, paint func(lipgloss.Style) lipgloss.Style) string {
+func (m Model) sparkline(id string, text lipgloss.Style, paint painter) string {
 	h := m.history.Of(id)
 	var drawn string
-	if m.apps.sort == apps.ByMemory {
+	if m.apps.sort.Family() == apps.ByMemory {
 		drawn = m.memorySparkline(h.Memory, text, paint)
 	} else {
 		drawn = m.cpuSparkline(h.CPU, paint)
@@ -34,7 +34,7 @@ func (m Model) sparkline(id string, text lipgloss.Style, paint func(lipgloss.Sty
 }
 
 // cpuSparkline uses a fixed scale that tops out at cpuHighPercent
-func (m Model) cpuSparkline(values []float64, paint func(lipgloss.Style) lipgloss.Style) string {
+func (m Model) cpuSparkline(values []float64, paint painter) string {
 	var b strings.Builder
 	b.WriteString(m.sparkMissing(len(values), paint))
 	for _, v := range values {
@@ -45,7 +45,7 @@ func (m Model) cpuSparkline(values []float64, paint func(lipgloss.Style) lipglos
 }
 
 // memorySparkline draws each reading as its rise above the lowest reading in the window
-func (m Model) memorySparkline(values []uint64, text lipgloss.Style, paint func(lipgloss.Style) lipgloss.Style) string {
+func (m Model) memorySparkline(values []uint64, text lipgloss.Style, paint painter) string {
 	style, suffix := text, ""
 	if len(values) > 1 && values[len(values)-1] >= values[0]+memGrowthBytes {
 		style = m.theme.Warning
@@ -68,7 +68,7 @@ func (m Model) memorySparkline(values []uint64, text lipgloss.Style, paint func(
 	return b.String()
 }
 
-func (m Model) sparkMissing(have int, paint func(lipgloss.Style) lipgloss.Style) string {
+func (m Model) sparkMissing(have int, paint painter) string {
 	missing := max(sparkWidth-have, 0)
 	return paint(m.theme.Muted).Render(strings.Repeat(m.theme.Glyphs.SparkMissing, missing))
 }
