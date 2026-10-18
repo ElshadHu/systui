@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -10,148 +9,17 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/ElshadHu/systui/internal/apps"
 	"github.com/ElshadHu/systui/internal/units"
+	"github.com/ElshadHu/systui/ui/applist"
+	"github.com/ElshadHu/systui/ui/draw"
 	"github.com/shirou/gopsutil/v4/process"
 )
 
 const (
-	memColumn      = 8
-	cpuColumn      = 7
-	procsColumn    = 5
-	peakColumn     = 8
-	cpuTimeColumn  = 8
-	sinceColumn    = 10
-	columnGap      = 3
-	markerColumn   = 1
-	minNameColumn  = 18
-	maxNameColumn  = 40
-	memberIndent   = 5
-	cpuWarnPercent = 25
-	cpuHighPercent = 60
-	memWarnBytes   = 1 << 30
-	memHighBytes   = 2 << 30
-	noValue        = "-"
+	memberIndent = 5
+	memWarnBytes = 1 << 30
+	memHighBytes = 2 << 30
+	noValue      = "-"
 )
-
-// field is one column to the right of the name
-type field int
-
-const (
-	memField field = iota
-	cpuField
-	procsField
-	sparkField
-	peakField
-	cpuTimeField
-	sinceField
-)
-
-var (
-	appsFields        = []field{memField, cpuField, procsField, sparkField}
-	appsDroppable     = []field{sparkField, procsField}
-	lifetimeFields    = []field{memField, peakField, cpuField, cpuTimeField, sinceField}
-	lifetimeDroppable = []field{sinceField, cpuField, memField}
-)
-
-func (f field) width() int {
-	switch f {
-	case memField:
-		return memColumn
-	case cpuField:
-		return cpuColumn
-	case procsField:
-		return procsColumn
-	case sparkField:
-		return sparkColumn
-	case peakField:
-		return peakColumn
-	case cpuTimeField:
-		return cpuTimeColumn
-	}
-	return sinceColumn
-}
-
-func (f field) title() string {
-	switch f {
-	case memField:
-		return "MEM"
-	case cpuField:
-		return "CPU"
-	case procsField:
-		return "PROCS"
-	case peakField:
-		return "PEAK"
-	case cpuTimeField:
-		return "CPU TIME"
-	case sinceField:
-		return "SINCE"
-	}
-	return ""
-}
-
-func (f field) sortKey() (apps.SortKey, bool) {
-	switch f {
-	case memField:
-		return apps.ByMemory, true
-	case cpuField:
-		return apps.ByCPU, true
-	case peakField:
-		return apps.ByPeak, true
-	case cpuTimeField:
-		return apps.ByCPUTime, true
-	}
-	return 0, false
-}
-
-// layout is the columns for one terminal width: the name takes what the
-// fixed columns leave, and droppable columns go first when it is too narrow
-type layout struct {
-	name   int
-	fields []field
-}
-
-func fitAppsColumns(width int) layout {
-	return fitLayout(width, appsFields, appsDroppable)
-}
-
-func fitLifetimeColumns(width int) layout {
-	return fitLayout(width, lifetimeFields, lifetimeDroppable)
-}
-
-func fitLayout(width int, fields, droppable []field) layout {
-	l := layout{fields: slices.Clone(fields)}
-	if width <= 0 {
-		l.name = 32
-		return l
-	}
-	for _, drop := range droppable {
-		if width-markerColumn-l.fixed() >= minNameColumn {
-			break
-		}
-		l.fields = slices.DeleteFunc(l.fields, func(f field) bool { return f == drop })
-	}
-	l.name = min(max(width-markerColumn-l.fixed(), minNameColumn), maxNameColumn)
-	return l
-}
-
-func (l layout) fixed() int {
-	n := 0
-	for _, f := range l.fields {
-		n += columnGap + f.width()
-	}
-	return n
-}
-
-func (l layout) has(f field) bool {
-	return slices.Contains(l.fields, f)
-}
-
-// columns is the layout of the tab being shown
-func (m Model) columns() layout {
-	if m.view == LifetimeView {
-		return fitLifetimeColumns(m.width)
-	}
-	return fitAppsColumns(m.width)
-}
 
 // appsView renders the column header and the visible rows for height lines
 func (m Model) appsView(height int) []string {
@@ -160,12 +28,12 @@ func (m Model) appsView(height int) []string {
 	}
 	l := m.columns()
 	lines := []string{m.appsHeader(l)}
-	shown, above, below := m.apps.viewport(height - 1)
+	shown, above, below := m.apps.Viewport(height - 1)
 	if above > 0 {
 		lines = append(lines, m.theme.Muted.Render(fmt.Sprintf(" %s %d more above", m.theme.Glyphs.Above, above)))
 	}
 	for _, r := range shown {
-		lines = append(lines, m.appsRow(r, l, r.id == m.apps.selected))
+		lines = append(lines, m.appsRow(r, l, r.ID == m.apps.Selected))
 	}
 	if below > 0 {
 		lines = append(lines, m.theme.Muted.Render(fmt.Sprintf(" %s %d more below", m.theme.Glyphs.Below, below)))
@@ -175,27 +43,28 @@ func (m Model) appsView(height int) []string {
 
 func (m Model) appsHeader(l layout) string {
 	t := m.theme
-	paint := m.painter(true)
+	paint := draw.Surface(t, true)
 	muted := paint(t.Muted)
 	sorted, _ := m.sortedField(l)
-	cells := []cell{{muted, " APP", l.name, false}}
+	cells := []draw.Cell{{Style: muted, Text: " APP", Width: l.name}}
 	for _, f := range l.fields {
 		style, title := muted, f.title()
 		switch {
 		case f == sparkField:
-			title = strings.Repeat(" ", sparkGap) + m.trendTitle() + " TREND " + t.Glyphs.Dot + " 1 bar = 1s"
+			title = strings.Repeat(" ", draw.SparkGap) + m.trendTitle() + " TREND " + t.Glyphs.Dot + " 1 bar = 1s"
 		case f == sorted:
 			style, title = paint(t.Accent), title+" "+t.Glyphs.Expanded
 		}
-		cells = append(cells, cell{style, title, f.width(), f != sparkField})
+		cells = append(cells, draw.Cell{Style: style, Text: title, Width: f.width(), Right: f != sparkField})
 	}
-	return m.fillLine(muted.Render(strings.Repeat(" ", markerColumn))+joinCells(cells, muted), muted)
+	line := muted.Render(strings.Repeat(" ", markerColumn)) + draw.JoinCells(cells, columnGap, muted)
+	return draw.FillLine(line, m.width, muted)
 }
 
 // sortedField is the column the sort key marks, falling back to the column
 // of its family when the layout has no column for the key itself
 func (m Model) sortedField(l layout) (field, bool) {
-	for _, key := range []apps.SortKey{m.apps.sort, m.apps.sort.Family()} {
+	for _, key := range []apps.SortKey{m.apps.Sort(), m.apps.Sort().Family()} {
 		for _, f := range l.fields {
 			if k, ok := f.sortKey(); ok && k == key {
 				return f, true
@@ -206,78 +75,15 @@ func (m Model) sortedField(l layout) (field, bool) {
 }
 
 func (m Model) trendTitle() string {
-	if m.apps.sort.Family() == apps.ByMemory {
+	if m.apps.Sort().Family() == apps.ByMemory {
 		return memField.title()
 	}
 	return cpuField.title()
 }
 
-// headerSortAt returns the sort key for the header cell at column x
-func headerSortAt(l layout, x int) (apps.SortKey, bool) {
-	start := markerColumn + l.name + columnGap
-	for _, f := range l.fields {
-		if x >= start && x < start+f.width() {
-			return f.sortKey()
-		}
-		start += f.width() + columnGap
-	}
-	return 0, false
-}
-
-// fillLine pads a line to the terminal width so a painted background reaches the edge
-func (m Model) fillLine(line string, style lipgloss.Style) string {
-	return line + style.Render(strings.Repeat(" ", max(m.width-lipgloss.Width(line), 0)))
-}
-
-// cell is one column of a row: its style, text, width and alignment
-type cell struct {
-	style lipgloss.Style
-	text  string
-	width int
-	right bool
-}
-
-func joinCells(cells []cell, gapStyle lipgloss.Style) string {
-	parts := make([]string, len(cells))
-	for i, c := range cells {
-		text := truncate(c.text, c.width)
-		pad := strings.Repeat(" ", max(c.width-lipgloss.Width(text), 0))
-		if c.right {
-			parts[i] = c.style.Render(pad + text)
-		} else {
-			parts[i] = c.style.Render(text + pad)
-		}
-	}
-	return strings.Join(parts, gapStyle.Render(strings.Repeat(" ", columnGap)))
-}
-
-func truncate(s string, width int) string {
-	if width <= 0 || lipgloss.Width(s) <= width {
-		return s
-	}
-	runes := []rune(s)
-	for len(runes) > 0 && lipgloss.Width(string(runes))+1 > width {
-		runes = runes[:len(runes)-1]
-	}
-	return string(runes) + "…"
-}
-
-// painter puts the surface background behind header and selected rows
-type painter func(lipgloss.Style) lipgloss.Style
-
-func (m Model) painter(surface bool) painter {
-	bg := m.theme.Colors.Surface
-	return func(s lipgloss.Style) lipgloss.Style {
-		if !surface || bg == nil {
-			return s
-		}
-		return s.Background(bg)
-	}
-}
-
-func (m Model) appsRow(r row, l layout, selected bool) string {
+func (m Model) appsRow(r applist.Row, l layout, selected bool) string {
 	t := m.theme
-	paint := m.painter(selected)
+	paint := draw.Surface(t, selected)
 	text := paint(t.Primary)
 	if selected {
 		text = paint(t.Bright)
@@ -287,22 +93,22 @@ func (m Model) appsRow(r row, l layout, selected bool) string {
 		marker = paint(t.Accent).Render(t.Glyphs.Accent)
 	}
 
-	var cells []cell
-	switch r.kind {
-	case groupRow:
-		cells = m.groupCells(r.group, l, text, paint)
-	case memberRow:
-		cells = m.memberCells(r.member, l, text, paint)
-	case moreRow:
-		cells = m.moreCells(r.hidden, l, paint)
+	var cells []draw.Cell
+	switch r.Kind {
+	case applist.GroupRow:
+		cells = m.groupCells(r.Group, l, text, paint)
+	case applist.MemberRow:
+		cells = m.memberCells(r.Member, l, text, paint)
+	case applist.MoreRow:
+		cells = m.moreCells(r.Hidden, l, paint)
 	}
-	return m.fillLine(marker+joinCells(cells, paint(t.Muted)), paint(t.Muted))
+	return draw.FillLine(marker+draw.JoinCells(cells, columnGap, paint(t.Muted)), m.width, paint(t.Muted))
 }
 
-func (m Model) groupCells(g *apps.Group, l layout, text lipgloss.Style, paint painter) []cell {
+func (m Model) groupCells(g *apps.Group, l layout, text lipgloss.Style, paint draw.Painter) []draw.Cell {
 	t := m.theme
 	glyph := t.Glyphs.Collapsed
-	if m.apps.allExpanded || m.apps.expanded == g.ID || m.apps.filter != "" {
+	if m.apps.Open(g.ID) {
 		glyph = t.Glyphs.Expanded
 	}
 	name := glyph + " " + g.Name
@@ -317,87 +123,92 @@ func (m Model) groupCells(g *apps.Group, l layout, text lipgloss.Style, paint pa
 	if g.Kind == apps.App || g.Kind == apps.Tool {
 		name += m.stateGlyph(g.Members)
 	}
-	cells := []cell{{nameStyle, name, l.name, false}}
+	cells := []draw.Cell{{Style: nameStyle, Text: name, Width: l.name}}
 	for _, f := range l.fields {
 		cells = append(cells, m.groupCell(f, g, text, paint))
 	}
 	return cells
 }
 
-func (m Model) groupCell(f field, g *apps.Group, text lipgloss.Style, paint painter) cell {
+func (m Model) groupCell(f field, g *apps.Group, text lipgloss.Style, paint draw.Painter) draw.Cell {
 	peak, cpuTime, started := g.PeakMemory, g.CPUTime, g.Started
 	if g.Kind == apps.Small {
 		peak, cpuTime, started = 0, 0, time.Time{}
 	}
 	switch f {
 	case memField:
-		return cell{paint(m.liveStyle(m.groupMemoryStyle(g.Memory, text))), memoryText(g.Memory), memColumn, true}
+		return draw.Cell{Style: paint(m.liveStyle(m.groupMemoryStyle(g.Memory, text))), Text: memoryText(g.Memory), Width: memColumn, Right: true}
 	case cpuField:
-		return cell{paint(m.liveStyle(m.cpuStyle(g.CPU, text))), cpuText(g.CPU), cpuColumn, true}
+		return draw.Cell{Style: paint(m.liveStyle(m.cpuStyle(g.CPU, text))), Text: cpuText(g.CPU), Width: cpuColumn, Right: true}
 	case procsField:
-		return cell{paint(m.theme.Muted), strconv.Itoa(len(g.Members)), procsColumn, true}
+		return draw.Cell{Style: paint(m.theme.Muted), Text: strconv.Itoa(len(g.Members)), Width: procsColumn, Right: true}
 	case sparkField:
 		trend := ""
 		if g.Kind != apps.Small {
 			trend = m.sparkline(g.ID, text, paint)
 		}
-		return cell{text, trend, sparkColumn, false}
+		return draw.Cell{Style: text, Text: trend, Width: draw.SparkColumn}
 	}
 	return m.lifetimeCell(f, peak, cpuTime, started, text, paint)
 }
 
-func (m Model) memberCells(member apps.Member, l layout, text lipgloss.Style, paint painter) []cell {
+// sparkline draws the history of one group for the sorted metric
+func (m Model) sparkline(id string, text lipgloss.Style, paint draw.Painter) string {
+	return draw.Sparkline(m.history.Of(id), m.apps.Sort(), m.theme, text, paint)
+}
+
+func (m Model) memberCells(member apps.Member, l layout, text lipgloss.Style, paint draw.Painter) []draw.Cell {
 	indent := strings.Repeat(" ", memberIndent)
-	cells := []cell{{text, indent + member.Label + m.stateGlyph([]apps.Member{member}), l.name, false}}
+	cells := []draw.Cell{{Style: text, Text: indent + member.Label + m.stateGlyph([]apps.Member{member}), Width: l.name}}
 	for _, f := range l.fields {
 		cells = append(cells, m.memberCell(f, member, text, paint))
 	}
 	return cells
 }
 
-func (m Model) memberCell(f field, member apps.Member, text lipgloss.Style, paint painter) cell {
+func (m Model) memberCell(f field, member apps.Member, text lipgloss.Style, paint draw.Painter) draw.Cell {
 	switch f {
 	case memField:
-		return cell{paint(m.liveStyle(m.memoryStyle(member.Memory, text))), memoryText(member.Memory), memColumn, true}
+		return draw.Cell{Style: paint(m.liveStyle(m.memoryStyle(member.Memory, text))), Text: memoryText(member.Memory), Width: memColumn, Right: true}
 	case cpuField:
-		return cell{paint(m.liveStyle(m.cpuStyle(member.CPU, text))), cpuText(member.CPU), cpuColumn, true}
+		return draw.Cell{Style: paint(m.liveStyle(m.cpuStyle(member.CPU, text))), Text: cpuText(member.CPU), Width: cpuColumn, Right: true}
 	case procsField, sparkField:
-		return cell{text, "", f.width(), f != sparkField}
+		return draw.Cell{Style: text, Width: f.width(), Right: f != sparkField}
 	}
 	return m.lifetimeCell(f, member.PeakMemory, member.CPUTime, time.UnixMilli(member.Started), text, paint)
 }
 
-func (m Model) lifetimeCell(f field, peak uint64, cpuTime time.Duration, started time.Time, text lipgloss.Style, paint painter) cell {
+func (m Model) lifetimeCell(f field, peak uint64, cpuTime time.Duration, started time.Time, text lipgloss.Style, paint draw.Painter) draw.Cell {
 	switch f {
 	case peakField:
-		return cell{paint(m.memoryStyle(peak, text)), memoryText(peak), peakColumn, true}
+		return draw.Cell{Style: paint(m.memoryStyle(peak, text)), Text: memoryText(peak), Width: peakColumn, Right: true}
 	case cpuTimeField:
 		if cpuTime == 0 {
-			return cell{paint(m.theme.Muted), noValue, cpuTimeColumn, true}
+			return draw.Cell{Style: paint(m.theme.Muted), Text: noValue, Width: cpuTimeColumn, Right: true}
 		}
-		return cell{text, units.Duration(cpuTime), cpuTimeColumn, true}
+		return draw.Cell{Style: text, Text: units.Duration(cpuTime), Width: cpuTimeColumn, Right: true}
 	}
 	since := sinceText(started, m.now)
 	if since == noValue {
-		return cell{paint(m.theme.Muted), since, sinceColumn, true}
+		return draw.Cell{Style: paint(m.theme.Muted), Text: since, Width: sinceColumn, Right: true}
 	}
-	return cell{text, since, sinceColumn, true}
+	return draw.Cell{Style: text, Text: since, Width: sinceColumn, Right: true}
 }
 
-func (m Model) moreCells(hidden int, l layout, paint painter) []cell {
+func (m Model) moreCells(hidden int, l layout, paint draw.Painter) []draw.Cell {
 	t := m.theme
 	muted := paint(t.Muted)
 	indent := strings.Repeat(" ", memberIndent)
-	cells := []cell{{muted, fmt.Sprintf("%s%s %d more", indent, t.Glyphs.More, hidden), l.name, false}}
+	cells := []draw.Cell{{Style: muted, Text: fmt.Sprintf("%s%s %d more", indent, t.Glyphs.More, hidden), Width: l.name}}
 	for i, f := range l.fields {
 		hint := ""
 		if i == len(l.fields)-1 {
 			hint = t.Glyphs.Enter + " expand"
 			if f == sparkField {
-				hint = strings.Repeat(" ", sparkGap) + hint
+				hint = strings.Repeat(" ", draw.SparkGap) + hint
 			}
 		}
-		cells = append(cells, cell{muted, hint, f.width(), f != sparkField})
+		cells = append(cells, draw.Cell{Style: muted, Text: hint, Width: f.width(), Right: f != sparkField})
 	}
 	return cells
 }
@@ -480,9 +291,9 @@ func (m Model) groupMemoryStyle(n uint64, text lipgloss.Style) lipgloss.Style {
 
 func (m Model) cpuStyle(pct float64, text lipgloss.Style) lipgloss.Style {
 	switch {
-	case pct >= cpuHighPercent:
+	case pct >= draw.CPUHighPercent:
 		return m.theme.Critical
-	case pct >= cpuWarnPercent:
+	case pct >= draw.CPUWarnPercent:
 		return m.theme.Warning
 	case pct < 0.05:
 		return m.theme.Muted

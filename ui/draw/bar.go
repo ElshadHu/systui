@@ -1,4 +1,4 @@
-package ui
+package draw
 
 import (
 	"strings"
@@ -12,8 +12,8 @@ const (
 	barCriticalPercent = 90
 )
 
-// renderBar draws pct as smooth blocks, the whole fill in one level color
-func renderBar(pct float64, width int, t theme.Theme) string {
+// Bar draws pct as smooth blocks, the whole fill in one level color
+func Bar(pct float64, width int, t theme.Theme) string {
 	if width <= 0 {
 		return ""
 	}

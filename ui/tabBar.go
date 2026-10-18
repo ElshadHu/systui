@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/ElshadHu/systui/ui/draw"
 )
 
 type View int
@@ -66,27 +67,15 @@ func (m Model) tabBar(first, last, total int) string {
 
 	var right []string
 	if m.view == AppsView {
-		if m.apps.filter != "" || m.apps.typing {
-			right = append(right, t.Accent.Render("/"+m.apps.filter))
+		if m.apps.Filter() != "" || m.apps.Typing {
+			right = append(right, t.Accent.Render("/"+m.apps.Filter()))
 		}
-		if m.apps.frozen(m.now) {
+		if m.apps.Frozen(m.now) {
 			right = append(right, t.Muted.Render(t.Glyphs.Paused+" sort paused"))
 		}
 		if total > 0 {
 			right = append(right, t.Muted.Render(fmt.Sprintf("rows %d–%d of %d", first, last, total)))
 		}
 	}
-	return alignEnds(left, strings.Join(right, "  "), m.width)
-}
-
-// alignEnds puts left at the start and right at the end of a width wide line
-func alignEnds(left, right string, width int) string {
-	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
-	if width <= 0 || gap < 1 {
-		if right == "" {
-			return left
-		}
-		return left + "  " + right
-	}
-	return left + strings.Repeat(" ", gap) + right
+	return draw.AlignEnds(left, strings.Join(right, "  "), m.width)
 }

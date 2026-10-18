@@ -1,4 +1,4 @@
-package ui
+package draw
 
 import (
 	"testing"
@@ -20,11 +20,11 @@ func TestRenderBarRoundsToEighths(t *testing.T) {
 		{140, "▕██████████▏"},
 	}
 	for _, c := range cases {
-		got := ansi.Strip(renderBar(c.pct, 10, th))
+		got := ansi.Strip(Bar(c.pct, 10, th))
 		if got != c.want {
 			t.Errorf("%v%%: want %s, got %s", c.pct, c.want, got)
 		}
-		if w := lipgloss.Width(renderBar(c.pct, 10, th)); w != 12 {
+		if w := lipgloss.Width(Bar(c.pct, 10, th)); w != 12 {
 			t.Errorf("%v%%: want width 12, got %d", c.pct, w)
 		}
 	}

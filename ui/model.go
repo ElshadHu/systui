@@ -11,15 +11,12 @@ import (
 	"github.com/ElshadHu/systui/internal/apps"
 	"github.com/ElshadHu/systui/internal/insight"
 	"github.com/ElshadHu/systui/internal/metrics"
-	"github.com/ElshadHu/systui/internal/units"
+	"github.com/ElshadHu/systui/ui/applist"
 	"github.com/ElshadHu/systui/ui/theme"
 )
 
 const (
 	refreshInterval = time.Second
-	defaultBarWidth = 20
-	cpuColWidth     = 16
-	memColWidth     = 18
 	topBarLines     = 2
 )
 
@@ -53,7 +50,7 @@ type Model struct {
 	width    int
 	height   int
 	view     View
-	apps     appsState
+	apps     applist.State
 	uid      uint32
 	now      time.Time
 	sampling bool
@@ -141,94 +138,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	m.now = time.Now()
-	if m.listsApps() && m.apps.typing {
-		m.typeFilter(msg)
-		return m, nil
-	}
-	switch msg.String() {
-	case "q", "ctrl+c":
-		return m, tea.Quit
-	case "1", "2", "3", "4", "5":
-		m.view = View(msg.String()[0] - '0')
-		return m, nil
-	}
-	if m.listsApps() {
-		m.appsKey(msg.String())
-	}
-	return m, nil
-}
-
-// listsApps is true on the tabs that show the grouped process rows
-func (m Model) listsApps() bool {
-	return m.view == AppsView || m.view == LifetimeView
-}
-
-func (m *Model) appsKey(key string) {
-	s := &m.apps
-	s.freeze(m.now)
-	switch key {
-	case "up":
-		s.move(-1)
-	case "down":
-		s.move(1)
-	case "pgup", "ctrl+u":
-		s.move(-m.listHeight())
-	case "pgdown", "ctrl+d":
-		s.move(m.listHeight())
-	case "g":
-		s.moveTo(0)
-	case "G":
-		s.moveTo(len(s.rows) - 1)
-	case "right":
-		s.expand()
-	case "left":
-		s.collapse()
-	case "space":
-		s.toggle()
-	case "enter":
-		if r, ok := s.current(); ok && r.kind == moreRow {
-			s.expand()
-		}
-	case "E":
-		s.expandAll()
-	case "C":
-		s.collapseAll()
-	case "c":
-		s.setSort(apps.ByCPU)
-	case "m":
-		s.setSort(apps.ByMemory)
-	case "p":
-		s.setSort(apps.ByPeak)
-	case "t":
-		s.setSort(apps.ByCPUTime)
-	case "/":
-		s.typing = true
-	case "esc":
-		s.setFilter("")
-	}
-}
-
-func (m *Model) typeFilter(msg tea.KeyPressMsg) {
-	s := &m.apps
-	switch msg.String() {
-	case "esc":
-		s.typing = false
-		s.setFilter("")
-	case "enter":
-		s.typing = false
-	case "backspace":
-		if len(s.filter) > 0 {
-			s.setFilter(s.filter[:len(s.filter)-1])
-		}
-	default:
-		if msg.Text != "" {
-			s.setFilter(s.filter + msg.Text)
-		}
-	}
-}
-
 // refresh reads new CPU, memory and pressure stats into the model
 func (m *Model) refresh() error {
 	cpuStats, err := m.sampler.Sample()
@@ -254,14 +163,19 @@ func (m *Model) refresh() error {
 // installGroups records a fresh sample into the history, orders it and refreshes the rows
 func (m *Model) installGroups(groups []apps.Group) {
 	m.history.Record(groups, m.now)
-	apps.Sort(groups, m.apps.sort)
+	apps.Sort(groups, m.apps.Sort())
 	m.peaks = insight.Peak(groups)
-	m.apps.setGroups(groups, m.now)
+	m.apps.SetGroups(groups, m.now)
 	m.rankInsights()
 }
 
 func (m *Model) rankInsights() {
 	m.insights = insight.Top(slices.Concat(m.system, m.peaks), maxInsights)
+}
+
+// listsApps is true on the tabs that show the grouped process rows
+func (m Model) listsApps() bool {
+	return m.view == AppsView || m.view == LifetimeView
 }
 
 // tabBarLine is the screen line the tab bar is drawn on
@@ -289,13 +203,13 @@ func (m Model) View() tea.View {
 	switch m.view {
 	case AppsView, LifetimeView:
 		body := m.appsView(m.listHeight() + 1)
-		shown, _, _ := m.apps.viewport(m.listHeight())
-		first, last := m.apps.position(shown)
-		lines = append(lines, m.tabBar(first, last, len(m.apps.rows)))
+		shown, _, _ := m.apps.Viewport(m.listHeight())
+		first, last := m.apps.Position(shown)
+		lines = append(lines, m.tabBar(first, last, len(m.apps.Rows)))
 		lines = append(lines, body...)
 	case OverviewView:
 		lines = append(lines, m.tabBar(0, 0, 0), "")
-		lines = append(lines, fitColumns("│", m.width, m.usagePanel(), m.cpuPanel(), m.memPanel())...)
+		lines = append(lines, m.overviewView()...)
 	default:
 		lines = append(lines, m.tabBar(0, 0, 0), "", m.theme.Muted.Render(viewNames[m.view]+" is not built yet"))
 	}
@@ -311,49 +225,4 @@ func (m Model) View() tea.View {
 	v.BackgroundColor = m.theme.Colors.Background
 	v.ForegroundColor = m.theme.Colors.Primary
 	return v
-}
-
-// usagePanel renders the CPU and MEM bars
-func (m Model) usagePanel() []string {
-	return []string{
-		m.theme.Bright.Render("% Usage"),
-		m.usageRow("CPU", m.cpu.Usage),
-		m.usageRow("MEM", m.mem.UsedPercent),
-	}
-}
-
-func (m Model) usageRow(label string, pct float64) string {
-	return m.theme.Bright.Render(label+":") + " " +
-		renderBar(pct, m.barWidth, m.theme) + " " +
-		m.theme.Bright.Render(fmt.Sprintf("%5.1f%%", pct))
-}
-
-// cpuPanel renders the per-counter CPU breakdown
-func (m Model) cpuPanel() []string {
-	cells := []string{
-		m.pct("user", m.cpu.User), m.pct("sys", m.cpu.System), m.pct("idle", m.cpu.Idle),
-		m.pct("nice", m.cpu.Nice), m.pct("iowait", m.cpu.Iowait), m.pct("irq", m.cpu.Irq),
-		m.pct("softirq", m.cpu.Softirq), m.pct("steal", m.cpu.Steal), m.pct("guest", m.cpu.Guest),
-	}
-	return append([]string{m.theme.Bright.Render("CPU")}, grid(cells, 3, cpuColWidth)...)
-}
-
-func (m Model) memPanel() []string {
-	cells := []string{
-		m.kv("total", units.Bytes(m.mem.Total)),
-		m.kv("used", units.Bytes(m.mem.Used)),
-		m.kv("free", units.Bytes(m.mem.Free)),
-		m.kv("active", units.Bytes(m.mem.Active)),
-		m.kv("buffers", units.Bytes(m.mem.Buffers)),
-		m.kv("cached", units.Bytes(m.mem.Cached)),
-	}
-	return append([]string{m.theme.Bright.Render("MEM")}, grid(cells, 3, memColWidth)...)
-}
-
-func (m Model) pct(label string, v float64) string {
-	return m.theme.Bright.Render(fmt.Sprintf("%s: %.1f%%", label, v))
-}
-
-func (m Model) kv(label, v string) string {
-	return m.theme.Bright.Render(label + ": " + v)
 }

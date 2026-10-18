@@ -7,6 +7,7 @@ import (
 	"github.com/ElshadHu/systui/internal/insight"
 	"github.com/ElshadHu/systui/internal/metrics"
 	"github.com/ElshadHu/systui/internal/units"
+	"github.com/ElshadHu/systui/ui/draw"
 	"github.com/ElshadHu/systui/ui/theme"
 )
 
@@ -21,15 +22,7 @@ func (m Model) topBar() []string {
 	if m.mem.HasCompressed {
 		fields = append(fields, m.compressedField())
 	}
-	return []string{fitFields(m.width, fields), m.insightLine()}
-}
-
-// fitFields drops fields from the right until the line fits.
-func fitFields(width int, fields []string) string {
-	for len(fields) > 1 && width > 0 && lipgloss.Width(strings.Join(fields, fieldGap)) > width {
-		fields = fields[:len(fields)-1]
-	}
-	return strings.Join(fields, fieldGap)
+	return []string{draw.FitFields(m.width, fieldGap, fields), m.insightLine()}
 }
 
 func (m Model) pressureField() string {

@@ -50,6 +50,7 @@ type Glyphs struct {
 	Ellipsis     string
 	SparkLevels  []string
 	SparkMissing string
+	Separator    string
 }
 
 type Theme struct {
@@ -92,6 +93,7 @@ var glyphs = Glyphs{
 	Ellipsis:     "…",
 	SparkLevels:  []string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"},
 	SparkMissing: "·",
+	Separator:    "│",
 }
 
 var dark = Palette{

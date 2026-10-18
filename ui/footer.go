@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/ElshadHu/systui/ui/draw"
 )
 
 type keyHint struct {
@@ -16,14 +17,14 @@ func (m Model) footer() string {
 	t := m.theme
 	var hints []keyHint
 	switch {
-	case m.listsApps() && m.apps.typing:
+	case m.listsApps() && m.apps.Typing:
 		hints = []keyHint{{"type", "to filter"}, {"esc", "clear"}, {t.Glyphs.Enter, "done"}}
 	case m.listsApps():
 		hints = []keyHint{
 			{"↑↓", "move"}, {"→←", "expand"}, {"E/C", "all"},
 			{"m p c t", "sort"}, {"/", "filter"}, {"1-5", "view"}, {"q", "quit"},
 		}
-		if m.apps.filter != "" {
+		if m.apps.Filter() != "" {
 			hints = append(hints[:len(hints)-2], keyHint{"esc", "clear filter"}, hints[len(hints)-2], hints[len(hints)-1])
 		}
 	default:
@@ -38,13 +39,13 @@ func (m Model) footer() string {
 	if legend == "" || lipgloss.Width(keys)+2+lipgloss.Width(legend) > m.width {
 		return keys
 	}
-	return alignEnds(keys, legend, m.width)
+	return draw.AlignEnds(keys, legend, m.width)
 }
 
 // legend explains the tab's own column in one line, shown when it fits
 func (m Model) legend() string {
 	switch {
-	case m.apps.typing:
+	case m.apps.Typing:
 		return ""
 	case m.view == LifetimeView:
 		return m.theme.Muted.Render("peak and CPU time since process start, group peak since systui start")

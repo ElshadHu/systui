@@ -6,6 +6,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/ElshadHu/systui/internal/apps"
+	"github.com/ElshadHu/systui/ui/applist"
 	"github.com/ElshadHu/systui/ui/theme"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -27,6 +29,17 @@ func TestFitAppsColumnsDropsFromTheRight(t *testing.T) {
 	}
 }
 
+func sampleGroups() []apps.Group {
+	return []apps.Group{
+		{ID: "chrome", Name: "Google Chrome", Kind: apps.App, Memory: 4 << 30, Members: []apps.Member{
+			{PID: 10, Label: "Google Chrome", Main: true}, {PID: 11, Label: "Renderer"}, {PID: 12, Label: "Renderer"},
+			{PID: 13, Label: "GPU Process"}, {PID: 14, Label: "Network Service"}, {PID: 15, Label: "Utility"}, {PID: 16, Label: "Utility"},
+		}},
+		{ID: "code", Name: "VS Code", Kind: apps.App, Memory: 2 << 30, Members: []apps.Member{{PID: 20, Label: "Electron", Main: true}, {PID: 21, Label: "Plugin"}}},
+		{ID: "loom", Name: "Loom", Kind: apps.App, Memory: 1 << 30, Members: []apps.Member{{PID: 30, Label: "Loom", Main: true}}},
+	}
+}
+
 func testModel(t *testing.T) Model {
 	th, err := theme.Named("dark")
 	if err != nil {
@@ -37,13 +50,13 @@ func testModel(t *testing.T) Model {
 		t.Fatal(err)
 	}
 	m.width, m.height = 80, 20
-	m.apps.setGroups(sampleGroups(), time.Unix(0, 0))
+	m.apps.SetGroups(sampleGroups(), time.Unix(0, 0))
 	return m
 }
 
 func TestRowsNeverExceedTheTerminalWidth(t *testing.T) {
 	m := testModel(t)
-	m.apps.expand()
+	m.apps.Expand()
 	for _, width := range []int{40, 60, 80, 120} {
 		m.width = width
 		for _, line := range m.appsView(10) {
@@ -75,20 +88,20 @@ func press(m Model, keys ...string) Model {
 func TestKeysDriveTheAppsView(t *testing.T) {
 	m := testModel(t)
 	m = press(m, "right", "down", "down")
-	if m.apps.selected != (rowID{group: "chrome", pid: 11}) {
-		t.Fatalf("right then down twice should land on the second member, got %v", m.apps.selected)
+	if m.apps.Selected != (applist.RowID{Group: "chrome", PID: 11}) {
+		t.Fatalf("right then down twice should land on the second member, got %v", m.apps.Selected)
 	}
 	m = press(m, "c")
-	if m.apps.sort != 1 || !strings.Contains(ansi.Strip(m.appsHeader(fitAppsColumns(80))), "CPU "+m.theme.Glyphs.Expanded) {
+	if m.apps.Sort() != 1 || !strings.Contains(ansi.Strip(m.appsHeader(fitAppsColumns(80))), "CPU "+m.theme.Glyphs.Expanded) {
 		t.Fatal("c should sort by CPU and mark the column")
 	}
 	m = press(m, "/", "l", "o", "o", "enter")
-	if m.apps.typing || m.apps.filter != "loo" || len(m.apps.rows) != 1 {
-		t.Fatalf("typing a filter should narrow the rows, got %q typing=%v rows=%d", m.apps.filter, m.apps.typing, len(m.apps.rows))
+	if m.apps.Typing || m.apps.Filter() != "loo" || len(m.apps.Rows) != 1 {
+		t.Fatalf("typing a filter should narrow the rows, got %q typing=%v rows=%d", m.apps.Filter(), m.apps.Typing, len(m.apps.Rows))
 	}
 	m = press(m, "esc")
-	if m.apps.filter != "" || len(m.apps.rows) != 9 {
-		t.Fatalf("esc should clear the filter and keep Chrome open, got %d rows", len(m.apps.rows))
+	if m.apps.Filter() != "" || len(m.apps.Rows) != 9 {
+		t.Fatalf("esc should clear the filter and keep Chrome open, got %d rows", len(m.apps.Rows))
 	}
 	m = press(m, "2")
 	if m.view != OverviewView {
@@ -124,45 +137,45 @@ func TestMouseDrivesTheAppsView(t *testing.T) {
 	cols := fitAppsColumns(m.width)
 
 	m = click(m, firstRow+1, firstRow+1)
-	if m.apps.selected != (rowID{group: "code"}) {
-		t.Fatalf("clicking the second row should select VS Code, got %v", m.apps.selected)
+	if m.apps.Selected != (applist.RowID{Group: "code"}) {
+		t.Fatalf("clicking the second row should select VS Code, got %v", m.apps.Selected)
 	}
 	m = click(m, 0, firstRow+1)
-	if m.apps.expanded != "code" || len(m.apps.rows) != 5 {
-		t.Fatalf("a second click on a group should open it, got expanded=%q rows=%d", m.apps.expanded, len(m.apps.rows))
+	if !m.apps.Open("code") || len(m.apps.Rows) != 5 {
+		t.Fatalf("a second click on a group should open it, got rows=%d", len(m.apps.Rows))
 	}
 	m = click(m, 0, firstRow+1)
-	if m.apps.expanded != "" || len(m.apps.rows) != 3 {
-		t.Fatalf("a third click should close it again, got expanded=%q rows=%d", m.apps.expanded, len(m.apps.rows))
+	if m.apps.Open("code") || len(m.apps.Rows) != 3 {
+		t.Fatalf("a third click should close it again, got rows=%d", len(m.apps.Rows))
 	}
 
 	m = click(m, 0, firstRow)
 	m = click(m, 0, firstRow)
 	m = click(m, 0, firstRow+6)
-	if m.apps.showAll != "chrome" || len(m.apps.rows) != 10 {
-		t.Fatalf("one click on the more row should show every member, got showAll=%q rows=%d", m.apps.showAll, len(m.apps.rows))
+	if len(m.apps.Rows) != 10 || m.apps.Rows[len(m.apps.Rows)-1].Kind == applist.MoreRow {
+		t.Fatalf("one click on the more row should show every member, got rows=%d", len(m.apps.Rows))
 	}
 
 	m = wheel(m, tea.MouseWheelDown)
 	m = wheel(m, tea.MouseWheelDown)
-	if m.apps.selected != (rowID{group: "chrome", pid: 11}) {
-		t.Fatalf("two wheel notches down should move two rows, got %v", m.apps.selected)
+	if m.apps.Selected != (applist.RowID{Group: "chrome", PID: 11}) {
+		t.Fatalf("two wheel notches down should move two rows, got %v", m.apps.Selected)
 	}
 	m = wheel(m, tea.MouseWheelUp)
-	if m.apps.selected != (rowID{group: "chrome", pid: 10}) || !m.apps.frozen(m.now) {
-		t.Fatalf("wheel up should move back one row and pause the sort, got %v", m.apps.selected)
+	if m.apps.Selected != (applist.RowID{Group: "chrome", PID: 10}) || !m.apps.Frozen(m.now) {
+		t.Fatalf("wheel up should move back one row and pause the sort, got %v", m.apps.Selected)
 	}
 
 	m = click(m, markerColumn+cols.name+columnGap+memColumn+columnGap, headerLine)
-	if m.apps.sort != 1 {
+	if m.apps.Sort() != 1 {
 		t.Fatal("clicking the CPU header should sort by CPU")
 	}
 	m = click(m, markerColumn+cols.name+columnGap, headerLine)
-	if m.apps.sort != 0 {
+	if m.apps.Sort() != 0 {
 		t.Fatal("clicking the MEM header should sort by memory")
 	}
 	m = click(m, 0, headerLine)
-	if m.apps.sort != 0 {
+	if m.apps.Sort() != 0 {
 		t.Fatal("clicking the APP header should change nothing")
 	}
 
@@ -183,15 +196,15 @@ func TestMouseDrivesTheAppsView(t *testing.T) {
 func TestRowAtSkipsTheAboveMarker(t *testing.T) {
 	m := testModel(t)
 	m.height = 8
-	m.apps.expandAll()
-	m.apps.moveTo(len(m.apps.rows) - 1)
-	shown, above, _ := m.apps.viewport(m.listHeight())
+	m.apps.ExpandAll()
+	m.apps.MoveTo(len(m.apps.Rows) - 1)
+	shown, above, _ := m.apps.Viewport(m.listHeight())
 	if above == 0 {
 		t.Fatal("the cursor at the end should leave rows above the viewport")
 	}
 	first := m.tabBarLine() + 3
-	if r, ok := m.rowAt(first); !ok || r.id != shown[0].id {
-		t.Fatalf("the line under the marker should be the first shown row, got %v", r.id)
+	if r, ok := m.rowAt(first); !ok || r.ID != shown[0].ID {
+		t.Fatalf("the line under the marker should be the first shown row, got %v", r.ID)
 	}
 	if _, ok := m.rowAt(first - 1); ok {
 		t.Fatal("the marker line is not a row")
