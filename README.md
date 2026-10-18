@@ -37,7 +37,7 @@ Every view has the same frame:
 
 | Field | Meaning |
 |-------|---------|
-| `Pressure` | GREEN, YELLOW or RED. On macOS this is the kernel's pressure level. On Linux it is read from Pressure Stall Information. Other systems use the amount of free memory. |
+| `Pressure` | GREEN, YELLOW or RED. On macOS this is the kernel's pressure level. On Linux it is read from Pressure Stall Information. Windows uses the amount of free memory. |
 | `Swap` | How much swap is in use. |
 | `Compressed` | macOS only. How much memory the kernel has compressed. |
 
@@ -47,6 +47,7 @@ Every view has the same frame:
 |-----|------|--------|
 | `1` | Apps | Built |
 | `2` | Overview | Built |
+| `3` | Lifetime | Built |
 
 ### Apps view
 
@@ -99,6 +100,8 @@ Keys:
 | `enter` | On a `… N more` row, show the hidden processes |
 | `m` | Sort by memory |
 | `c` | Sort by CPU |
+| `p` | Sort by peak memory |
+| `t` | Sort by CPU time |
 | `/` | Type a filter. Rows whose app or process name contains the text stay. |
 | `esc` | Clear the filter |
 | `q` or `ctrl+c` | Quit |
@@ -107,6 +110,25 @@ An expanded group shows its five biggest processes and a `… N more` row.
 
 After any key or click, the sort is paused for 2 seconds so rows do not
 move under your cursor. The tab bar shows `sort paused` while this is on.
+
+### Lifetime view
+
+The same rows, cursor, filter and sort as the Apps view. The columns show
+what each app has used since it started.
+
+| Column | Meaning |
+|--------|---------|
+| MEM | Memory right now |
+| PEAK | Highest memory seen. For an app, since systui started. For a process, since the process started, as reported by the operating system. |
+| CPU | CPU right now |
+| CPU TIME | CPU seconds since the process started, including children that have exited |
+| SINCE | When the app's main process started: a time today, `yest 22:40`, or a date |
+
+The small processes row shows a dash in these columns, because its members
+change every second.
+
+When an app is below half of a peak of 1 GB or more, the insight line says
+so, for example `Google Chrome peaked at 4.6 GB at 09:31, now 1.6 GB`.
 
 ### Overview view
 
