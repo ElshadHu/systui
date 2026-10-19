@@ -1,6 +1,6 @@
 //go:build linux
 
-package metrics
+package proc
 
 import (
 	"os"

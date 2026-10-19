@@ -1,6 +1,6 @@
 //go:build darwin
 
-package metrics
+package proc
 
 import (
 	"github.com/shirou/gopsutil/v4/process"

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ElshadHu/systui/internal/metrics"
+	"github.com/ElshadHu/systui/internal/proc"
 )
 
 type Kind int
@@ -101,8 +101,8 @@ var shells = map[string]bool{
 }
 
 // Build groups processes, in no particular order
-func Build(stats []metrics.ProcessStats) []Group {
-	byPID := make(map[int32]*metrics.ProcessStats, len(stats))
+func Build(stats []proc.Stats) []Group {
+	byPID := make(map[int32]*proc.Stats, len(stats))
 	for i := range stats {
 		byPID[stats[i].PID] = &stats[i]
 	}
@@ -178,7 +178,7 @@ func boolInt(b bool) int {
 }
 
 // rootOf decides which group a process belongs to
-func rootOf(p *metrics.ProcessStats, byPID map[int32]*metrics.ProcessStats) (id, name string, kind Kind) {
+func rootOf(p *proc.Stats, byPID map[int32]*proc.Stats) (id, name string, kind Kind) {
 	if p.Exe == "" {
 		if p.UID == 0 || strings.HasPrefix(p.User, "_") {
 			return SystemGroupID, SystemGroupName, System
@@ -189,7 +189,7 @@ func rootOf(p *metrics.ProcessStats, byPID map[int32]*metrics.ProcessStats) (id,
 		return SystemGroupID, SystemGroupName, System
 	}
 
-	var best *metrics.ProcessStats
+	var best *proc.Stats
 	cur := p
 	for depth := 0; depth < maxWalkDepth; depth++ {
 		if _, _, ok := appOf(cur.Exe); ok {
@@ -215,7 +215,7 @@ func rootOf(p *metrics.ProcessStats, byPID map[int32]*metrics.ProcessStats) (id,
 }
 
 // labelOf prefers the command a process was started as, since a multicall
-func labelOf(p *metrics.ProcessStats) string {
+func labelOf(p *proc.Stats) string {
 	base := filepath.Base(strings.TrimPrefix(p.Argv0, "-"))
 	if p.Argv0 == "" || base == "." || base == "/" {
 		return p.Name

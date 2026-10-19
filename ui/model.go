@@ -11,6 +11,7 @@ import (
 	"github.com/ElshadHu/systui/internal/apps"
 	"github.com/ElshadHu/systui/internal/insight"
 	"github.com/ElshadHu/systui/internal/metrics"
+	"github.com/ElshadHu/systui/internal/proc"
 	"github.com/ElshadHu/systui/ui/applist"
 	"github.com/ElshadHu/systui/ui/theme"
 )
@@ -28,7 +29,7 @@ type processTickMsg struct{}
 
 // processesMsg carries one finished process sample
 type processesMsg struct {
-	stats []metrics.ProcessStats
+	stats []proc.Stats
 	err   error
 }
 
@@ -36,7 +37,7 @@ type processesMsg struct {
 type Model struct {
 	theme    theme.Theme
 	sampler  *metrics.CPUSampler
-	procs    *metrics.ProcessSampler
+	procs    *proc.Sampler
 	history  *apps.Histories
 	cpu      metrics.CPUStats
 	mem      metrics.MemStats
@@ -65,7 +66,7 @@ func New(t theme.Theme) (Model, error) {
 	return Model{
 		theme:    t,
 		sampler:  sampler,
-		procs:    metrics.NewProcessSampler(),
+		procs:    proc.NewSampler(),
 		history:  apps.NewHistories(),
 		barWidth: defaultBarWidth,
 		view:     AppsView,
@@ -93,7 +94,7 @@ func processTickNow() tea.Cmd {
 }
 
 // sampleProcesses runs the slow process walk off the update loop
-func sampleProcesses(s *metrics.ProcessSampler) tea.Cmd {
+func sampleProcesses(s *proc.Sampler) tea.Cmd {
 	return func() tea.Msg {
 		stats, err := s.Sample()
 		return processesMsg{stats: stats, err: err}

@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ElshadHu/systui/internal/metrics"
+	"github.com/ElshadHu/systui/internal/proc"
 )
 
 const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 const chromeRenderer = "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)"
 
-func proc(pid, ppid int32, name, exe string, mem uint64) metrics.ProcessStats {
-	return metrics.ProcessStats{PID: pid, PPID: ppid, Name: name, Exe: exe, Memory: mem, UID: 501, User: "me", Started: time.Unix(int64(pid), 0)}
+func stat(pid, ppid int32, name, exe string, mem uint64) proc.Stats {
+	return proc.Stats{PID: pid, PPID: ppid, Name: name, Exe: exe, Memory: mem, UID: 501, User: "me", Started: time.Unix(int64(pid), 0)}
 }
 
 func find(groups []Group, id string) *Group {
@@ -26,10 +26,10 @@ func find(groups []Group, id string) *Group {
 }
 
 func TestHelpersJoinTheOutermostBundle(t *testing.T) {
-	stats := []metrics.ProcessStats{
-		proc(1, 0, "launchd", "/sbin/launchd", 10<<20),
-		proc(10, 1, "Google Chrome", chrome, 300<<20),
-		proc(11, 10, "Google Chrome Helper (Renderer)", chromeRenderer, 800<<20),
+	stats := []proc.Stats{
+		stat(1, 0, "launchd", "/sbin/launchd", 10<<20),
+		stat(10, 1, "Google Chrome", chrome, 300<<20),
+		stat(11, 10, "Google Chrome Helper (Renderer)", chromeRenderer, 800<<20),
 	}
 	stats[2].Cmdline = chromeRenderer + " --type=renderer --lang=en"
 	groups := sorted(Build(stats), ByMemory)
@@ -51,11 +51,11 @@ func TestHelpersJoinTheOutermostBundle(t *testing.T) {
 func TestChildWithoutBundleJoinsNearestAncestorBundle(t *testing.T) {
 	code := "/Applications/Visual Studio Code.app/Contents/MacOS/Electron"
 	plugin := "/Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper (Plugin).app/Contents/MacOS/Code Helper (Plugin)"
-	stats := []metrics.ProcessStats{
-		proc(1, 0, "launchd", "/sbin/launchd", 10<<20),
-		proc(20, 1, "Electron", code, 400<<20),
-		proc(21, 20, "Code Helper (Plugin)", plugin, 300<<20),
-		proc(22, 21, "node", "/usr/local/bin/node", 100<<20),
+	stats := []proc.Stats{
+		stat(1, 0, "launchd", "/sbin/launchd", 10<<20),
+		stat(20, 1, "Electron", code, 400<<20),
+		stat(21, 20, "Code Helper (Plugin)", plugin, 300<<20),
+		stat(22, 21, "node", "/usr/local/bin/node", 100<<20),
 	}
 	groups := sorted(Build(stats), ByMemory)
 	g := find(groups, "/Applications/Visual Studio Code.app")
@@ -69,11 +69,11 @@ func TestChildWithoutBundleJoinsNearestAncestorBundle(t *testing.T) {
 
 func TestShellStopsTheWalk(t *testing.T) {
 	iterm := "/Applications/iTerm.app/Contents/MacOS/iTerm2"
-	stats := []metrics.ProcessStats{
-		proc(1, 0, "launchd", "/sbin/launchd", 10<<20),
-		proc(30, 1, "iTerm2", iterm, 200<<20),
-		proc(31, 30, "zsh", "/bin/zsh", 5<<20),
-		proc(32, 31, "node", "/usr/local/bin/node", 600<<20),
+	stats := []proc.Stats{
+		stat(1, 0, "launchd", "/sbin/launchd", 10<<20),
+		stat(30, 1, "iTerm2", iterm, 200<<20),
+		stat(31, 30, "zsh", "/bin/zsh", 5<<20),
+		stat(32, 31, "node", "/usr/local/bin/node", 600<<20),
 	}
 	groups := sorted(Build(stats), ByMemory)
 	g := find(groups, "/usr/local/bin/node")
@@ -86,9 +86,9 @@ func TestShellStopsTheWalk(t *testing.T) {
 }
 
 func TestSystemPathsAndUnreadableRootProcesses(t *testing.T) {
-	stats := []metrics.ProcessStats{
-		proc(1, 0, "launchd", "/sbin/launchd", 10<<20),
-		proc(40, 1, "WindowServer", "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer", 500<<20),
+	stats := []proc.Stats{
+		stat(1, 0, "launchd", "/sbin/launchd", 10<<20),
+		stat(40, 1, "WindowServer", "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer", 500<<20),
 		{PID: 41, PPID: 1, Name: "secretd", UID: 0, User: "root"},
 		{PID: 42, PPID: 1, Name: "_mdnsresponder", UID: 65, User: "_mdnsresponder"},
 	}
@@ -100,10 +100,10 @@ func TestSystemPathsAndUnreadableRootProcesses(t *testing.T) {
 }
 
 func TestQuietGroupsMergeIntoSmallBucketLast(t *testing.T) {
-	stats := []metrics.ProcessStats{
-		proc(50, 1, "big", "/opt/big", 900<<20),
-		proc(51, 1, "tiny", "/opt/tiny", 1<<20),
-		proc(52, 1, "mini", "/opt/mini", 2<<20),
+	stats := []proc.Stats{
+		stat(50, 1, "big", "/opt/big", 900<<20),
+		stat(51, 1, "tiny", "/opt/tiny", 1<<20),
+		stat(52, 1, "mini", "/opt/mini", 2<<20),
 	}
 	groups := sorted(Build(stats), ByMemory)
 	if len(groups) != 2 || groups[0].ID != "/opt/big" {
@@ -118,10 +118,10 @@ func TestQuietGroupsMergeIntoSmallBucketLast(t *testing.T) {
 func TestMainIsTheMemberWhoseParentIsOutside(t *testing.T) {
 	code := "/Applications/Visual Studio Code.app/Contents/MacOS/Electron"
 	plugin := "/Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper (Plugin).app/Contents/MacOS/Code Helper (Plugin)"
-	stats := []metrics.ProcessStats{
-		proc(20, 1, "Electron", code, 100<<20),
-		proc(21, 20, "Code Helper (Plugin)", plugin, 300<<20),
-		proc(22, 21, "gopls", "/Users/me/go/bin/gopls", 400<<20),
+	stats := []proc.Stats{
+		stat(20, 1, "Electron", code, 100<<20),
+		stat(21, 20, "Code Helper (Plugin)", plugin, 300<<20),
+		stat(22, 21, "gopls", "/Users/me/go/bin/gopls", 400<<20),
 	}
 	g := find(sorted(Build(stats), ByMemory), "/Applications/Visual Studio Code.app")
 	for _, m := range g.Members {
@@ -133,10 +133,10 @@ func TestMainIsTheMemberWhoseParentIsOutside(t *testing.T) {
 
 func TestToolGroupIsNamedByTheCommandItRunsAs(t *testing.T) {
 	exe := "/Users/me/.local/share/claude/versions/2.1.296"
-	stats := []metrics.ProcessStats{
-		proc(70, 1, "2.1.296", exe, 250<<20),
-		proc(71, 70, "2.1.296", exe, 20<<20),
-		proc(72, 1, "-zsh", "/opt/homebrew/bin/zsh", 120<<20),
+	stats := []proc.Stats{
+		stat(70, 1, "2.1.296", exe, 250<<20),
+		stat(71, 70, "2.1.296", exe, 20<<20),
+		stat(72, 1, "-zsh", "/opt/homebrew/bin/zsh", 120<<20),
 	}
 	stats[0].Argv0 = "claude"
 	stats[1].Argv0 = "ugrep"
@@ -152,9 +152,9 @@ func TestToolGroupIsNamedByTheCommandItRunsAs(t *testing.T) {
 }
 
 func TestAppleAppsAreAppsNotSystem(t *testing.T) {
-	stats := []metrics.ProcessStats{
-		proc(80, 1, "Terminal", "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal", 200<<20),
-		proc(81, 1, "Finder", "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder", 200<<20),
+	stats := []proc.Stats{
+		stat(80, 1, "Terminal", "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal", 200<<20),
+		stat(81, 1, "Finder", "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder", 200<<20),
 	}
 	groups := sorted(Build(stats), ByMemory)
 	if g := find(groups, "/System/Applications/Utilities/Terminal.app"); g == nil || g.Kind != App {
@@ -166,9 +166,9 @@ func TestAppleAppsAreAppsNotSystem(t *testing.T) {
 }
 
 func TestSortByCPU(t *testing.T) {
-	stats := []metrics.ProcessStats{
-		proc(60, 1, "heavy", "/opt/heavy", 100<<20),
-		proc(61, 1, "busy", "/opt/busy", 60<<20),
+	stats := []proc.Stats{
+		stat(60, 1, "heavy", "/opt/heavy", 100<<20),
+		stat(61, 1, "busy", "/opt/busy", 60<<20),
 	}
 	stats[1].CPU = 40
 	groups := sorted(Build(stats), ByCPU)
@@ -178,10 +178,10 @@ func TestSortByCPU(t *testing.T) {
 }
 
 func TestBuildSumsCPUTimeAndTakesTheMainStart(t *testing.T) {
-	stats := []metrics.ProcessStats{
-		proc(1, 0, "launchd", "/sbin/launchd", 10<<20),
-		proc(10, 1, "Google Chrome", chrome, 300<<20),
-		proc(11, 10, "Google Chrome Helper (Renderer)", chromeRenderer, 800<<20),
+	stats := []proc.Stats{
+		stat(1, 0, "launchd", "/sbin/launchd", 10<<20),
+		stat(10, 1, "Google Chrome", chrome, 300<<20),
+		stat(11, 10, "Google Chrome Helper (Renderer)", chromeRenderer, 800<<20),
 	}
 	stats[1].CPUTime = time.Hour
 	stats[2].CPUTime = 30 * time.Minute

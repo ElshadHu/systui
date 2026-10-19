@@ -1,4 +1,4 @@
-package metrics
+package proc
 
 import (
 	"os/user"
@@ -10,8 +10,8 @@ import (
 	"github.com/shirou/gopsutil/v4/process"
 )
 
-// ProcessStats is one live process
-type ProcessStats struct {
+// Stats is one live process
+type Stats struct {
 	PID     int32
 	PPID    int32
 	UID     uint32
@@ -43,26 +43,26 @@ type usage struct {
 type trackedProcess struct {
 	proc    *process.Process
 	created int64
-	stats   ProcessStats
+	stats   Stats
 }
 
-// ProcessSampler keeps a Process per PID across samples so that
+// Sampler keeps a Process per PID across samples so that
 // Percent can measure CPU since the previous call
-type ProcessSampler struct {
+type Sampler struct {
 	mu      sync.Mutex
 	tracked map[int32]*trackedProcess
 	users   map[uint32]string
 }
 
-func NewProcessSampler() *ProcessSampler {
-	return &ProcessSampler{
+func NewSampler() *Sampler {
+	return &Sampler{
 		tracked: make(map[int32]*trackedProcess),
 		users:   make(map[uint32]string),
 	}
 }
 
 // Sample returns every live process
-func (s *ProcessSampler) Sample() ([]ProcessStats, error) {
+func (s *Sampler) Sample() ([]Stats, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -72,7 +72,7 @@ func (s *ProcessSampler) Sample() ([]ProcessStats, error) {
 	}
 
 	seen := make(map[int32]bool, len(pids))
-	stats := make([]ProcessStats, 0, len(pids))
+	stats := make([]Stats, 0, len(pids))
 	for _, pid := range pids {
 		t, ok := s.identify(pid)
 		if !ok {
@@ -91,7 +91,7 @@ func (s *ProcessSampler) Sample() ([]ProcessStats, error) {
 }
 
 // identify returns the tracked entry for pid
-func (s *ProcessSampler) identify(pid int32) (*trackedProcess, bool) {
+func (s *Sampler) identify(pid int32) (*trackedProcess, bool) {
 	fresh, err := process.NewProcess(pid)
 	if err != nil {
 		return nil, false
@@ -110,7 +110,7 @@ func (s *ProcessSampler) identify(pid int32) (*trackedProcess, bool) {
 	t := &trackedProcess{
 		proc:    fresh,
 		created: created,
-		stats: ProcessStats{
+		stats: Stats{
 			PID:     pid,
 			Name:    name,
 			Started: time.UnixMilli(created),
@@ -132,7 +132,7 @@ func (s *ProcessSampler) identify(pid int32) (*trackedProcess, bool) {
 }
 
 // read refreshes the fields that change between samples
-func (s *ProcessSampler) read(t *trackedProcess) ProcessStats {
+func (s *Sampler) read(t *trackedProcess) Stats {
 	row := t.stats
 	if cpu, err := t.proc.Percent(0); err == nil {
 		row.CPU = cpu
@@ -158,7 +158,7 @@ func portableUsage(p *process.Process) usage {
 }
 
 // owner resolves the real UID once and reuses it for later samples
-func (s *ProcessSampler) owner(p *process.Process) (uint32, string) {
+func (s *Sampler) owner(p *process.Process) (uint32, string) {
 	uids, err := p.Uids()
 	if err != nil || len(uids) == 0 {
 		return 0, "-"

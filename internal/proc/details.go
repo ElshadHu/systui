@@ -1,9 +1,8 @@
-package metrics
+package proc
 
 import (
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -27,8 +26,8 @@ type FieldError struct {
 	Err   error
 }
 
-// ProcessDetails holds the slow to read fields shown in the drawer
-type ProcessDetails struct {
+// Details holds the slow to read fields shown in the drawer
+type Details struct {
 	PID        int32
 	Name       string
 	Cmdline    string
@@ -53,18 +52,18 @@ var (
 	ErrNoData     = errors.New("no data, needs root for other users' processes")
 )
 
-// ReadProcessDetails reads everything the drawer shows for one PID.
+// ReadDetails reads everything the drawer shows for one PID.
 // A field that cannot be read is listed in Unreadable
-func ReadProcessDetails(pid int32) (ProcessDetails, error) {
+func ReadDetails(pid int32) (Details, error) {
 	p, err := process.NewProcess(pid)
 	if err != nil {
-		return ProcessDetails{}, err
+		return Details{}, err
 	}
 	name, err := p.Name()
 	if err != nil {
-		return ProcessDetails{}, err
+		return Details{}, err
 	}
-	d := ProcessDetails{PID: pid, Name: name}
+	d := Details{PID: pid, Name: name}
 
 	if cmdline, err := p.Cmdline(); err == nil {
 		d.Cmdline = cmdline
@@ -130,7 +129,7 @@ func ReadProcessDetails(pid int32) (ProcessDetails, error) {
 	return d, nil
 }
 
-func (d *ProcessDetails) fail(field string, err error) {
+func (d *Details) fail(field string, err error) {
 	d.Unreadable = append(d.Unreadable, FieldError{Field: field, Err: err})
 }
 
@@ -218,31 +217,4 @@ func address(a net.Addr) string {
 		return fmt.Sprintf(":%d", a.Port)
 	}
 	return fmt.Sprintf("%s:%d", a.IP, a.Port)
-}
-
-func KillProcess(pid int32) error {
-	return signal(pid, (*process.Process).Kill)
-}
-
-func TerminateProcess(pid int32) error {
-	return signal(pid, (*process.Process).Terminate)
-}
-
-func SuspendProcess(pid int32) error {
-	return signal(pid, (*process.Process).Suspend)
-}
-
-func ResumeProcess(pid int32) error {
-	return signal(pid, (*process.Process).Resume)
-}
-
-func signal(pid int32, send func(*process.Process) error) error {
-	if int(pid) == os.Getpid() {
-		return ErrOwnProcess
-	}
-	p, err := process.NewProcess(pid)
-	if err != nil {
-		return err
-	}
-	return send(p)
 }

@@ -1,6 +1,6 @@
 //go:build darwin
 
-package metrics
+package proc
 
 import (
 	"os"

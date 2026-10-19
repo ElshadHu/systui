@@ -1,4 +1,4 @@
-package metrics
+package proc
 
 import (
 	"errors"
@@ -7,42 +7,14 @@ import (
 	"testing"
 )
 
-func TestSampleIncludesOwnProcess(t *testing.T) {
-	s := NewProcessSampler()
-	stats, err := s.Sample()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range stats {
-		if int(p.PID) == os.Getpid() {
-			if p.Name == "" || p.User == "" || p.Started.IsZero() {
-				t.Fatalf("own process row is incomplete: %+v", p)
-			}
-			return
-		}
-	}
-	t.Fatalf("own PID %d missing from %d rows", os.Getpid(), len(stats))
-}
-
-func TestSampleDropsExitedProcesses(t *testing.T) {
-	s := NewProcessSampler()
-	s.tracked[-1] = nil
-	if _, err := s.Sample(); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := s.tracked[-1]; ok {
-		t.Fatal("PID -1 should have been pruned")
-	}
-}
-
 func TestSignalRefusesOwnProcess(t *testing.T) {
-	if err := KillProcess(int32(os.Getpid())); err != ErrOwnProcess {
+	if err := Kill(int32(os.Getpid())); err != ErrOwnProcess {
 		t.Fatalf("want ErrOwnProcess, got %v", err)
 	}
 }
 
 func TestReadProcessDetailsOwnProcess(t *testing.T) {
-	d, err := ReadProcessDetails(int32(os.Getpid()))
+	d, err := ReadDetails(int32(os.Getpid()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +51,7 @@ func TestReadProcessDetailsRecordsUnreadableFields(t *testing.T) {
 	if runtime.GOOS != "darwin" || os.Geteuid() == 0 {
 		t.Skip("needs a process owned by another user without root")
 	}
-	d, err := ReadProcessDetails(1)
+	d, err := ReadDetails(1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,35 +71,5 @@ func TestLsofPathsDeniedForOtherUser(t *testing.T) {
 	}
 	if _, err := lsofPaths(1); !errors.Is(err, ErrLsofDenied) {
 		t.Fatalf("want ErrLsofDenied, got %v", err)
-	}
-}
-
-func TestSampleReadsOwnProcessStatics(t *testing.T) {
-	s := NewProcessSampler()
-	stats, err := s.Sample()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range stats {
-		if int(p.PID) != os.Getpid() {
-			continue
-		}
-		if p.Exe == "" || p.Cmdline == "" || p.PPID == 0 || p.Memory == 0 {
-			t.Fatalf("own process statics are incomplete: %+v", p)
-		}
-		return
-	}
-	t.Fatalf("own PID %d missing", os.Getpid())
-}
-
-func TestSampleReplacesReusedPID(t *testing.T) {
-	s := NewProcessSampler()
-	pid := int32(os.Getpid())
-	s.tracked[pid] = &trackedProcess{created: -1, stats: ProcessStats{Name: "stale"}}
-	if _, err := s.Sample(); err != nil {
-		t.Fatal(err)
-	}
-	if s.tracked[pid].stats.Name == "stale" {
-		t.Fatal("tracked entry with another create time should be replaced")
 	}
 }
